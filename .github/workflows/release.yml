@@ -75,8 +75,10 @@ jobs:
             echo "Release ${VERSION} already exists. Refusing to overwrite it." >&2
             exit 1
           fi
-          gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
-            --title "FRAME ${VERSION}" \
-            --generate-notes \
-            --target "${GITHUB_SHA}" \
-            --verify-tag
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
+              --title "FRAME ${VERSION}" --generate-notes --verify-tag
+          else
+            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
+              --title "FRAME ${VERSION}" --generate-notes --target "${GITHUB_SHA}"
+          fi
