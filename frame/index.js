@@ -82,6 +82,8 @@
     const file = React.useRef(null);
     const dragIndex = React.useRef(null);
     const [dragOver, setDragOver] = React.useState(null);
+    const [pinRename, setPinRename] = React.useState(null);
+    const [pinRenameValue, setPinRenameValue] = React.useState('');
     const [release, setRelease] = React.useState(null);
     const [latestNotes, setLatestNotes] = React.useState(null);
     const [notesOpen, setNotesOpen] = React.useState(false);
@@ -130,6 +132,16 @@
       spaces[prev.active] = list;
       return { ...prev, spaces };
     });
+    const savePinName = event => {
+      event.preventDefault();
+      if (!pinRename) return;
+      const value = pinRenameValue.trim().slice(0, 100);
+      if (!value) { setError('Pin name cannot be empty.'); return; }
+      update(prev => ({ ...prev, spaces: { ...prev.spaces,
+        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value } : item)
+      } }));
+      setPinRename(null); setPinRenameValue(''); setError('');
+    };
     const reorder = (from, to) => {
       if (from === null || from === to || from < 0 || to < 0) return;
       update(prev => {
@@ -273,6 +285,18 @@
         h('button', { onClick: () => duplicateSpace(contextMenu.space) }, 'Duplicate'),
         Object.keys(data.spaces).length > 1 && h('button', { onClick: () => openDialog('delete', contextMenu.space) }, 'Delete')
       ), document.body),
+      pinRename && h('div', { className: 'frame-dialog-overlay', onClick: () => setPinRename(null) },
+        h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: savePinName },
+          h('h3', null, 'Rename pin'),
+          h('input', { className: 'frame-field', autoFocus: true, maxLength: 100, required: true,
+            'aria-label': 'Pin display name', value: pinRenameValue, onChange: e => setPinRenameValue(e.target.value) }),
+          error && h('p', { className: 'frame-error' }, error),
+          h('div', { className: 'frame-dialog-actions' },
+            button('Cancel', () => { setPinRename(null); setError(''); }),
+            h('button', { className: 'frame-button primary', type: 'submit' }, 'Save name')
+          )
+        )
+      ),
       dialog && h('div', { className: 'frame-dialog-overlay', onClick: () => setDialog(null) },
         h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: submitDialog },
           h('h3', null, dialog.type === 'create' ? 'Create workspace' : dialog.type === 'rename' ? 'Rename workspace' : 'Delete workspace?'),
@@ -301,6 +325,7 @@
           h('div', null, h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
           editing ? h('div', { className: 'frame-tile-actions' },
             button('←', () => move(i, -1)), button('→', () => move(i, 1)),
+            button('Rename', () => { setPinRename(item.id); setPinRenameValue(item.name); setError(''); }),
             button('Remove', () => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].filter(x => x.id !== item.id) } })))
           ) : button('Open ↗', () => {
             const path = pathFromUri(item.uri);
