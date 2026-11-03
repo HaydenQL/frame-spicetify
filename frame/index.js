@@ -5,8 +5,8 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.1';
-  const UPDATE_REPO = 'HaydenQL/frame-spicetify'; // Set to owner/repository after publishing FRAME.
+  const FRAME_VERSION = '0.1.3';
+  const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
     version: 1,
@@ -78,20 +78,32 @@
     const [newSpace, setNewSpace] = React.useState('');
     const file = React.useRef(null);
     const [release, setRelease] = React.useState(null);
-    const [updateMessage, setUpdateMessage] = React.useState('');
+    const [showNotes, setShowNotes] = React.useState(false);
+    const [dismissedVersion, setDismissedVersion] = React.useState('');
     React.useEffect(() => {
-      if (!UPDATE_REPO) { setUpdateMessage('Updates are not connected to a release repository yet.'); return; }
       let cancelled = false;
-      fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, { headers: { Accept: 'application/vnd.github+json' } })
-        .then(response => { if (!response.ok) throw Error('Release check failed'); return response.json(); })
-        .then(result => {
+      let timer;
+      const check = async () => {
+        try {
+          const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
+            headers: { Accept: 'application/vnd.github+json' }, cache: 'no-store'
+          });
+          if (!response.ok) return;
+          const result = await response.json();
           if (cancelled) return;
-          const current = FRAME_VERSION.split('.').map(Number);
-          const latest = String(result.tag_name || '').replace(/^v/, '').split('.').map(Number);
-          if (latest.length !== 3 || latest.some(n => !Number.isInteger(n))) return;
-          if (latest.some((n, i) => n > current[i] && latest.slice(0, i).every((x, j) => x === current[j]))) setRelease(result);
-        }).catch(() => { if (!cancelled) setUpdateMessage('Could not check for updates.'); });
-      return () => { cancelled = true; };
+          const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
+          const current = parse(FRAME_VERSION);
+          const latest = parse(String(result.tag_name || ''));
+          if (!latest || !current) return;
+          const newer = latest[0] > current[0] ||
+            (latest[0] === current[0] && latest[1] > current[1]) ||
+            (latest[0] === current[0] && latest[1] === current[1] && latest[2] > current[2]);
+          setRelease(newer ? result : null);
+        } catch (_) { /* Offline or rate-limited: do not interrupt listening. */ }
+      };
+      check();
+      timer = setInterval(check, 15 * 60 * 1000);
+      return () => { cancelled = true; clearInterval(timer); };
     }, []);
 
     const items = data.spaces[data.active] || [];
@@ -155,16 +167,20 @@
         .frame-tile .frame-button{padding:5px 9px;font-size:11px}.frame-form{margin-top:28px;padding:20px;background:var(--spice-card,#222);border-radius:10px;max-width:720px}
         .frame-form h3{margin:0 0 14px}.frame-field{background:var(--spice-main,#111);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:10px 12px;min-width:0;flex:1;font:inherit;font-size:13px}
         .frame-inputs{display:flex;gap:8px;flex-wrap:wrap}.frame-form-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.frame-empty{padding:50px 20px;text-align:center;border:1px dashed rgba(255,255,255,.2);border-radius:10px;color:var(--spice-subtext,#aaa)}
-        .frame-update{display:flex;align-items:center;justify-content:space-between;gap:12px;border:1px solid rgba(255,255,255,.16);border-radius:8px;padding:15px;margin-bottom:20px}.frame-update p{margin:4px 0 0}.frame-error{color:#ffb4aa;font-size:12px;margin-top:14px}.frame-footer{margin-top:34px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+        .frame-update{position:fixed;right:24px;bottom:105px;z-index:9999;width:min(360px,calc(100vw - 48px));background:var(--spice-card,#242424);box-shadow:0 12px 36px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:18px}.frame-update p{margin:8px 0 12px}.frame-update-actions{display:flex;gap:8px;flex-wrap:wrap}.frame-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px;line-height:1.5;padding:10px 0}.frame-error{color:#ffb4aa;font-size:12px;margin-top:14px}.frame-footer{margin-top:34px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
       `),
       h('header', { className: 'frame-header' },
         h('div', null, h('div', { className: 'frame-eyebrow' }, 'FRAME / YOUR SPOTIFY'), h('h1', { className: 'frame-title' }, 'Your space.'), h('p', { className: 'frame-muted' }, 'Everything you actually use. Nothing you don’t.')),
         h('div', { className: 'frame-actions' }, button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : ''))
       ),
-      release && h('aside', { className: 'frame-update' },
-        h('div', null, h('strong', null, `FRAME ${String(release.tag_name).slice(0, 24)} is available`),
-          h('p', { className: 'frame-muted' }, 'The Windows updater installs verified releases automatically when enabled.')),
-        button('Release notes', () => window.open(release.html_url, '_blank', 'noopener,noreferrer'))
+      release && dismissedVersion !== release.tag_name && h('aside', { className: 'frame-update', role: 'status' },
+        h('strong', null, `FRAME ${String(release.tag_name).slice(0, 24)} is available`),
+        h('p', { className: 'frame-muted' }, 'An update is ready. Your music will not be interrupted by this notification.'),
+        showNotes && h('div', { className: 'frame-notes' }, String(release.body || 'No release notes provided.').slice(0, 6000)),
+        h('div', { className: 'frame-update-actions' },
+          button(showNotes ? 'Hide notes' : 'Release notes', () => setShowNotes(!showNotes)),
+          button('Later', () => setDismissedVersion(release.tag_name))
+        )
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
         ...Object.keys(data.spaces).map(space => button(space, () => update(prev => ({ ...prev, active: space })), space === data.active ? 'selected' : ''))
