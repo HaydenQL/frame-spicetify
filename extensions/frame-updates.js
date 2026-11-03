@@ -39,6 +39,7 @@
     link.click();
     link.remove();
   }
+  const manualCommand = 'cd "$env:LOCALAPPDATA\\FrameUpdater"; .\\Update-Frame.ps1';
   function notify(release, preview = false) {
     const old = document.getElementById('frame-update-toast');
     if (old) old.remove();
@@ -71,7 +72,16 @@
         return;
       }
       launchUpdate();
-      info.textContent = 'Opening the FRAME updater. If Windows asks to open an external app, allow it. If nothing happens, verify the frame-update protocol registration.';
+      info.textContent = 'Requested Windows updater launch. Spotify cannot confirm it started. If nothing happens, use Copy PowerShell command below.';
+    });
+    button('Copy PowerShell command', async () => {
+      if (preview) { info.textContent = 'Preview only. No command copied.'; return; }
+      try {
+        await navigator.clipboard.writeText(manualCommand);
+        info.textContent = 'Copied. Open PowerShell and paste the command to update FRAME and see any errors.';
+      } catch (_) {
+        info.textContent = 'Clipboard unavailable. Run this in PowerShell: ' + manualCommand;
+      }
     });
     button('Later', () => {
       if (!preview) localStorage.setItem(DISMISS_KEY, release.tag_name);
