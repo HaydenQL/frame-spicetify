@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.8';
+  const FRAME_VERSION = '0.1.9';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -70,27 +70,58 @@
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
   const artworkCache = new Map();
+  async function spotifyArtwork(uri) {
+    const match = /^spotify:(playlist|album|artist|track|show|episode):([A-Za-z0-9]+)$/.exec(uri);
+    if (!match) return '';
+    const [, type, id] = match;
+    const api = Spicetify.CosmosAsync;
+    const endpoints = {
+      playlist: 'https://api.spotify.com/v1/playlists/' + id + '?fields=images',
+      album: 'https://api.spotify.com/v1/albums/' + id,
+      artist: 'https://api.spotify.com/v1/artists/' + id,
+      track: 'https://api.spotify.com/v1/tracks/' + id,
+      show: 'https://api.spotify.com/v1/shows/' + id,
+      episode: 'https://api.spotify.com/v1/episodes/' + id
+    };
+    // Use Spotify's own authenticated API, not the public oEmbed endpoint
+    // (which is often blocked from inside the Spotify desktop client).
+    if (api && typeof api.get === 'function') {
+      try {
+        const result = await api.get(endpoints[type]);
+        const images = type === 'track' ? result?.album?.images : result?.images;
+        const image = images?.find(x => x?.url)?.url;
+        if (typeof image === 'string' && /^https:\/\//.test(image)) return image;
+      } catch (_) {}
+    }
+    // Spicetify's internal metadata endpoint is a secondary fallback.
+    if (api && typeof api.get === 'function') {
+      try {
+        const meta = await api.get('sp://core-playlist/v1/playlist/' + id + '/metadata');
+        const image = meta?.images?.[0]?.url || meta?.picture || meta?.image;
+        if (type === 'playlist' && typeof image === 'string') {
+          if (/^https:\/\//.test(image)) return image;
+          if (/^spotify:image:[a-zA-Z0-9]+$/.test(image)) return 'https://i.scdn.co/image/' + image.split(':')[2];
+        }
+      } catch (_) {}
+    }
+    return '';
+  }
   function Artwork({ item }) {
-    const [url, setUrl] = React.useState(() => artworkCache.get(item.uri) || '');
+    const [url, setUrl] = React.useState(() => item.image || artworkCache.get(item.uri) || '');
     React.useEffect(() => {
       let alive = true;
-      setUrl(artworkCache.get(item.uri) || '');
-      const match = /^spotify:(playlist|album|artist|track|show|episode):([A-Za-z0-9]+)$/.exec(item.uri);
-      if (!match || artworkCache.has(item.uri)) return () => { alive = false; };
-      const controller = new AbortController();
-      fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/' + match[1] + '/' + match[2]), { signal: controller.signal })
-        .then(response => { if (!response.ok) throw Error('Artwork unavailable'); return response.json(); })
-        .then(info => {
-          const image = typeof info.thumbnail_url === 'string' && /^https:\/\//.test(info.thumbnail_url) ? info.thumbnail_url : '';
-          artworkCache.set(item.uri, image);
-          if (alive) setUrl(image);
-        }).catch(() => { artworkCache.set(item.uri, ''); });
-      return () => { alive = false; controller.abort(); };
-    }, [item.uri]);
+      setUrl(item.image || artworkCache.get(item.uri) || '');
+      if (item.image || artworkCache.has(item.uri)) return () => { alive = false; };
+      spotifyArtwork(item.uri).then(image => {
+        if (image) artworkCache.set(item.uri, image);
+        if (alive) setUrl(image);
+      });
+      return () => { alive = false; };
+    }, [item.uri, item.image]);
     const type = item.uri.split(':')[1];
     const symbol = ({ playlist: '♫', album: '◉', artist: '✦', track: '♪', show: '◈', episode: '◈', collection: '♥', search: '⌕' })[type] || '♫';
     return h('div', { className: 'frame-artwork frame-artwork-' + type },
-      url ? h('img', { src: url, alt: '', loading: 'lazy', referrerPolicy: 'no-referrer' }) : h('span', { 'aria-hidden': true }, symbol)
+      url ? h('img', { src: url, alt: '', loading: 'lazy', onError: () => setUrl('') }) : h('span', { 'aria-hidden': true }, symbol)
     );
   }
   function App() {
@@ -109,6 +140,12 @@
     const [pinRename, setPinRename] = React.useState(null);
     const [pinRenameValue, setPinRenameValue] = React.useState('');
     const [pinLinkValue, setPinLinkValue] = React.useState('');
+    const [pinImageValue, setPinImageValue] = React.useState('');
+    const [pinSizeValue, setPinSizeValue] = React.useState('normal');
+    const [pinFavoriteValue, setPinFavoriteValue] = React.useState(false);
+    const [sortMode, setSortMode] = React.useState('custom');
+    const [compact, setCompact] = React.useState(false);
+    const [undo, setUndo] = React.useState(null);
     const tabDrag = React.useRef(null);
     const [tabDrop, setTabDrop] = React.useState(null);
     const [release, setRelease] = React.useState(null);
@@ -145,7 +182,7 @@
     }, []);
 
     const items = data.spaces[data.active] || [];
-    const visibleItems = items.map((item, index) => ({ item, index })).filter(({ item }) => (item.name + ' ' + item.kind).toLowerCase().includes(filter.toLowerCase()));
+    const visibleItems = items.map((item, index) => ({ item, index })).filter(({ item }) => (item.name + ' ' + item.kind).toLowerCase().includes(filter.toLowerCase())).sort((a,b) => sortMode === 'name' ? a.item.name.localeCompare(b.item.name) : sortMode === 'favorites' ? Number(!!b.item.favorite) - Number(!!a.item.favorite) : a.index-b.index);
     const update = (fn) => setData(prev => {
       const next = normalize(fn(prev));
       try { write(next); } catch (_) { setError('Could not save locally. Check available storage.'); }
@@ -165,10 +202,11 @@
       const value = pinRenameValue.trim().slice(0, 100);
       const uri = extractUri(pinLinkValue) || (['spotify:collection:tracks','spotify:collection','spotify:search'].includes(pinLinkValue.trim()) ? pinLinkValue.trim() : null);
       if (!value || !uri) { setError('Enter a name and valid Spotify link or URI.'); return; }
+      if (pinImageValue.trim() && !/^https:\/\//.test(pinImageValue.trim())) { setError('Custom artwork must use an HTTPS image URL.'); return; }
       update(prev => ({ ...prev, spaces: { ...prev.spaces,
-        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value, uri, kind: uri.split(':')[1] } : item)
+        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value, uri, kind: uri.split(':')[1], image: pinImageValue.trim(), size: pinSizeValue, favorite: pinFavoriteValue } : item)
       } }));
-      setPinRename(null); setPinRenameValue(''); setPinLinkValue(''); setError('');
+      setPinRename(null); setPinRenameValue(''); setPinLinkValue(''); setPinImageValue(''); setError('');
     };
     const reorderSpace = (from, to) => {
       if (!from || !to || from === to) return;
@@ -192,6 +230,15 @@
         spaces[prev.active] = list;
         return { ...prev, spaces };
       });
+    };
+    const removePin = id => {
+      const snapshot = JSON.stringify(data);
+      update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].filter(x => x.id !== id) } }));
+      setUndo(snapshot);
+    };
+    const duplicatePin = item => {
+      if (items.length >= 100) { setError('Workspace is full.'); return; }
+      update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: [...prev.spaces[prev.active], { ...item, id: String(Date.now()) + '-' + Math.random().toString(36).slice(2), name: item.name + ' copy' }] } }));
     };
     const add = (event) => {
       event.preventDefault();
@@ -265,7 +312,7 @@
       event.target.value = '';
     };
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
-    return h('main', { className: 'frame-root', onClick: () => contextMenu && setContextMenu(null) },
+    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), onClick: () => contextMenu && setContextMenu(null) },
       h('style', null, `
         .frame-root{font-family:inherit;color:var(--spice-text,#fff);padding:36px 40px 80px;max-width:1250px;margin:auto}
         .frame-root *{box-sizing:border-box}.frame-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:32px}
@@ -287,7 +334,7 @@
         .frame-workspace-toolbar h2{margin:0;font-size:21px;letter-spacing:-.025em}
         .frame-tabs .selected{background:var(--spice-text,#fff);color:var(--spice-main,#111)}
         .frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}
-        .frame-tile{min-height:225px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
+        .frame-tile.frame-tile-large{grid-column:span 2}.frame-compact .frame-artwork{height:80px}.frame-compact .frame-tile{min-height:165px;padding:12px}.frame-compact .frame-grid{grid-template-columns:repeat(auto-fill,minmax(165px,1fr))}.frame-tile{min-height:225px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
         .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-tab[draggable=true]{cursor:grab}.frame-tab.frame-tab-drop{outline:2px solid var(--spice-button,#1db954);border-radius:8px}.frame-artwork{height:124px;border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:13px;background:linear-gradient(135deg,#264a68,#37244d);font-size:62px;color:#fff;user-select:none}.frame-artwork img{height:100%;width:100%;object-fit:cover}.frame-artwork-collection{background:linear-gradient(135deg,#5a2ac5,#b24687)}.frame-artwork-search{background:linear-gradient(135deg,#225d55,#319f82)}.frame-artwork-artist{background:linear-gradient(135deg,#73442e,#b76a46)}.frame-artwork-album{background:linear-gradient(135deg,#263f7b,#895bb0)}.frame-artwork-track{background:linear-gradient(135deg,#205947,#438d73)}.frame-tile[draggable=true]{cursor:grab}.frame-tile[draggable=true]:active{cursor:grabbing}.frame-tile.frame-drop-target{outline:2px solid var(--spice-button,#1db954);outline-offset:2px}.frame-drag-help{font-size:12px;color:var(--spice-subtext,#aaa);margin:0 0 12px}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
         .frame-name{font-size:19px;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.frame-tile-actions{display:flex;gap:6px;margin-top:14px}
         .frame-tile .frame-button{padding:5px 9px;font-size:11px}.frame-form{margin-top:28px;padding:20px;background:var(--spice-card,#222);border-radius:10px;max-width:720px}
@@ -336,10 +383,14 @@
           h('input', { className: 'frame-field', autoFocus: true, maxLength: 100, required: true,
             'aria-label': 'Pin display name', value: pinRenameValue, onChange: e => setPinRenameValue(e.target.value) }),
           h('input', { className: 'frame-field', maxLength: 500, required: true, placeholder: 'Spotify link or URI', 'aria-label': 'Pin Spotify link or URI', value: pinLinkValue, onChange: e => setPinLinkValue(e.target.value) }),
+          h('input', { className: 'frame-field', maxLength: 1000, placeholder: 'Optional custom HTTPS artwork URL', 'aria-label': 'Custom artwork URL', value: pinImageValue, onChange: e => setPinImageValue(e.target.value) }),
+          h('label', null, h('input', { type: 'checkbox', checked: pinFavoriteValue, onChange: e => setPinFavoriteValue(e.target.checked) }), ' Favorite pin'),
+          h('select', { className: 'frame-field', value: pinSizeValue, onChange: e => setPinSizeValue(e.target.value), 'aria-label': 'Pin size' },
+            h('option', { value: 'normal' }, 'Normal tile'), h('option', { value: 'large' }, 'Large tile')),
           error && h('p', { className: 'frame-error' }, error),
           h('div', { className: 'frame-dialog-actions' },
             button('Cancel', () => { setPinRename(null); setError(''); }),
-            h('button', { className: 'frame-button primary', type: 'submit' }, 'Save name')
+            h('button', { className: 'frame-button primary', type: 'submit' }, 'Save pin')
           )
         )
       ),
@@ -358,21 +409,28 @@
           )
         )
       ),
-      h('div', { className: 'frame-form-row', style: { marginBottom: '18px' } }, h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' })),
+      h('div', { className: 'frame-form-row', style: { marginBottom: '18px', alignItems: 'center' } },
+        h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' }),
+        h('select', { className: 'frame-field', style: { flex: '0 0 auto' }, value: sortMode, onChange: e => setSortMode(e.target.value), 'aria-label': 'Sort pins' },
+          h('option', { value: 'custom' }, 'Custom order'), h('option', { value: 'name' }, 'Name A-Z'), h('option', { value: 'favorites' }, 'Favorites first')),
+        button(compact ? 'Comfortable view' : 'Compact view', () => setCompact(!compact)),
+        undo && button('Undo last removal', () => { update(() => JSON.parse(undo)); setUndo(null); })
+      ),
       items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Drag workspace tabs to reorder them too.'),
       visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
-        h('article', { className: 'frame-tile' + (dragOver === i ? ' frame-drop-target' : ''), key: item.id,
-          draggable: !filter.trim(),
-          onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
-          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
-          onDrop: e => { e.preventDefault(); if (!filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
+        h('article', { className: 'frame-tile' + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === i ? ' frame-drop-target' : ''), key: item.id,
+          draggable: !filter.trim() && sortMode === 'custom',
+          onDragStart: e => { if (filter.trim() || sortMode !== 'custom') { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
+          onDragOver: e => { if (sortMode === 'custom' && !filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
+          onDrop: e => { e.preventDefault(); if (sortMode === 'custom' && !filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
-          h('div', null, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
+          h('div', null, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name)),
           editing ? h('div', { className: 'frame-tile-actions' },
             button('←', () => move(i, -1)), button('→', () => move(i, 1)),
-            button('Edit', () => { setPinRename(item.id); setPinRenameValue(item.name); setPinLinkValue(item.uri); setError(''); }),
-            button('Remove', () => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].filter(x => x.id !== item.id) } })))
+            button('Edit', () => { setPinRename(item.id); setPinRenameValue(item.name); setPinLinkValue(item.uri); setPinImageValue(item.image || ''); setPinSizeValue(item.size || 'normal'); setPinFavoriteValue(!!item.favorite); setError(''); }),
+            button('Copy', () => duplicatePin(item)),
+            button('Remove', () => removePin(item.id))
           ) : button('Open ↗', () => {
             const path = pathFromUri(item.uri);
             if (path) Spicetify.Platform.History.push(path);
