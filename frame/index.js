@@ -79,6 +79,8 @@
     const [filter, setFilter] = React.useState('');
     const file = React.useRef(null);
     const [release, setRelease] = React.useState(null);
+    const [latestNotes, setLatestNotes] = React.useState(null);
+    const [notesOpen, setNotesOpen] = React.useState(false);
     const [showNotes, setShowNotes] = React.useState(false);
     const [dismissedVersion, setDismissedVersion] = React.useState('');
     React.useEffect(() => {
@@ -92,6 +94,7 @@
           if (!response.ok) return;
           const result = await response.json();
           if (cancelled) return;
+          setLatestNotes(result);
           const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
           const current = parse(FRAME_VERSION);
           const latest = parse(String(result.tag_name || ''));
@@ -175,14 +178,13 @@
         h('div', null, h('div', { className: 'frame-eyebrow' }, 'FRAME / YOUR SPOTIFY'), h('h1', { className: 'frame-title' }, 'Your space.'), h('p', { className: 'frame-muted' }, 'Everything you actually use. Nothing you don’t.')),
         h('div', { className: 'frame-actions' }, button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : ''))
       ),
-      release && dismissedVersion !== release.tag_name && h('aside', { className: 'frame-update', role: 'status' },
-        h('strong', null, `FRAME ${String(release.tag_name).slice(0, 24)} is available`),
-        h('p', { className: 'frame-muted' }, 'An update is ready. Your music will not be interrupted by this notification.'),
-        showNotes && h('div', { className: 'frame-notes' }, String(release.body || 'No release notes provided.').slice(0, 6000)),
-        h('div', { className: 'frame-update-actions' },
-          button(showNotes ? 'Hide notes' : 'Release notes', () => setShowNotes(!showNotes)),
-          button('Later', () => setDismissedVersion(release.tag_name))
-        )
+      h('section', { className: 'frame-form', style: { marginTop: 0, marginBottom: 24, maxWidth: 'none' } },
+        h('div', { className: 'frame-form-row', style: { alignItems: 'center', justifyContent: 'space-between', marginTop: 0 } },
+          h('strong', null, 'FRAME release notes'),
+          button(notesOpen ? 'Hide release notes' : 'View release notes', () => setNotesOpen(!notesOpen))
+        ),
+        notesOpen && h('div', { className: 'frame-notes' },
+          latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').slice(0, 6000)}` : 'Release notes are unavailable while offline.')
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
         ...Object.keys(data.spaces).map(space => button(space, () => update(prev => ({ ...prev, active: space })), space === data.active ? 'selected' : ''))
