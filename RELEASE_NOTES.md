@@ -1,17 +1,11 @@
-## FRAME v0.1.9
+## FRAME v0.2.0
 
-- Fetch actual Spotify playlist, album, artist, track, podcast and episode covers through Spicetify's authenticated Spotify API instead of the blocked public oEmbed endpoint.
-- Playlist metadata fallback through Spotify's internal Cosmos endpoint.
-- Optional custom HTTPS artwork URL for any pin.
-- Mark pins as favorites and sort favorites first.
-- Sort pins alphabetically or use custom drag order.
-- Compact layout toggle for more pins on screen.
-- Normal and large tile sizes per pin.
-- Duplicate pins in Edit workspace.
-- Undo the most recent pin removal.
-- Edit name, destination, artwork, favorite status and size in one dialog.
-- Keep workspace tab dragging and pin dragging from v0.1.8.
+- Remove pin movement arrows. Drag pins while Custom order is selected.
+- Click anywhere on a pin's content to open its Spotify destination. No separate Open button.
+- Add a dedicated play button to each pin, using Spicetify Player.playUri for supported music content.
+- Try Spotify's internal PlaylistAPI and multiple playlist metadata endpoints for real artwork, including user playlists and custom covers.
+- Reset stale drag state when removing and undoing pins, and return to Custom order after undo.
+- Add Favorites only filter and quick usage tips.
+- Retain custom artwork URLs, compact mode, favorites sorting, tile sizes, duplication and export/import.
 
-Testing: Verify real playlist covers on public and owned playlists; album and artist covers; edit a pin's custom image; favorites sorting; compact mode; duplicate/remove/undo; large tiles; and drag ordering after returning to Custom order.
-
-Known limitation: Actual Spotify cover loading requires the embedded Spotify API to return images; custom URL images must be HTTPS. UI/runtime testing in Spotify is still required.
+Test inside Spotify: own and other playlists with custom covers, album art, direct card navigation, play button, drag after undo, favorites filtering. The internal Spotify API varies between Spotify releases and may require further adjustment.
