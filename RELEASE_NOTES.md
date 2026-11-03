@@ -1,18 +1,20 @@
-## FRAME v0.1.6
+## FRAME v0.1.7
 
-### Update reliability
-- The FRAME release package now includes the global notification extension.
-- The updated Windows updater keeps an already-installed notification extension in sync with FRAME, avoiding false "update available" alerts after upgrades.
-- The updater backs up and restores the extension if installation fails.
-- The Update Now confirmation uses FRAME's custom modal instead of a browser confirm dialog.
+### Workspace improvements
+- Drag pinned tiles to reorder them while editing a workspace. The arrow buttons remain available for precise or keyboard-friendly adjustments.
+- Rename pinned tiles with a custom FRAME dialog, without removing and re-adding them.
+- The right-click workspace menu is positioned in the viewport instead of inside Spotify's transformed layout.
 
-### What to test
-- On v0.1.6, no v0.1.6 update notification should appear.
-- Verify the extension still works on Home, Search and FRAME.
-- Right-click workspace tabs for Rename, Duplicate and Delete.
-- Check custom rename/delete dialogs, search, pins and release notes.
+### Updates and testing
+- Add a Test update notification button in the FRAME footer to preview the notification, release notes and confirmation dialog without launching the updater.
+- The global notification extension's version matches FRAME v0.1.7.
+- Bundle the notification extension with the verified app release, so the updated Windows updater can synchronize an already-installed extension and restore it if an update fails.
+- The update confirmation uses a custom FRAME dialog instead of a browser confirm.
 
-### Limitations
-- The updated Windows updater script must be installed once to enable extension synchronization.
-- Spotify may reload when Spicetify applies an update.
-- Windows may show its own external-app protocol permission dialog when launching the updater; FRAME cannot suppress operating-system security prompts.
+### Test plan
+1. Before installing v0.1.7, check whether the current extension detects the new release.
+2. After installing, verify there is no false update alert for v0.1.7.
+3. In FRAME, use Test update notification and try Release notes, Update now and Finish test.
+4. Edit a workspace, drag pins, rename a pin, then reopen FRAME to verify persistence.
+5. Right-click workspace tabs at different positions; test rename, duplicate and delete.
+6. Export and import a workspace backup.
