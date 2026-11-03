@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.4';
+  const FRAME_VERSION = '0.1.5';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -76,6 +76,8 @@
     const [link, setLink] = React.useState('');
     const [error, setError] = React.useState('');
     const [newSpace, setNewSpace] = React.useState('');
+    const [dialog, setDialog] = React.useState(null);
+    const [contextMenu, setContextMenu] = React.useState(null);
     const [filter, setFilter] = React.useState('');
     const file = React.useRef(null);
     const [release, setRelease] = React.useState(null);
@@ -142,6 +144,49 @@
       update(prev => ({ ...prev, active: value, spaces: { ...prev.spaces, [value]: [] } }));
       setNewSpace(''); setError('');
     };
+    const duplicateSpace = space => {
+      const base = (space.slice(0, 24) + ' copy').slice(0, 32);
+      let target = base, suffix = 2;
+      while (data.spaces[target] && suffix < 100) target = base.slice(0, 29) + ' ' + suffix++;
+      if (Object.keys(data.spaces).length >= 12) { setError('Maximum 12 workspaces.'); return; }
+      update(prev => ({ ...prev, active: target, spaces: { ...prev.spaces,
+        [target]: prev.spaces[space].map(item => ({ ...item, id: item.id + '-copy-' + Date.now() })) } }));
+      setContextMenu(null);
+    };
+    const submitDialog = event => {
+      event.preventDefault();
+      if (!dialog) return;
+      const value = newSpace.trim().slice(0, 32);
+      if (dialog.type === 'create') {
+        if (!value || data.spaces[value] || Object.keys(data.spaces).length >= 12) {
+          setError('Choose a unique workspace name (maximum 12).'); return;
+        }
+        createSpace();
+      } else if (dialog.type === 'rename') {
+        if (!value || (value !== dialog.space && data.spaces[value])) {
+          setError('Choose a unique workspace name.'); return;
+        }
+        update(prev => {
+          const spaces = {};
+          for (const [key, items] of Object.entries(prev.spaces)) spaces[key === dialog.space ? value : key] = items;
+          return { ...prev, active: prev.active === dialog.space ? value : prev.active, spaces };
+        });
+      } else if (dialog.type === 'delete') {
+        if (Object.keys(data.spaces).length <= 1) { setError('Keep at least one workspace.'); return; }
+        update(prev => {
+          const spaces = { ...prev.spaces };
+          delete spaces[dialog.space];
+          return { ...prev, spaces, active: prev.active === dialog.space ? Object.keys(spaces)[0] : prev.active };
+        });
+      }
+      setDialog(null); setContextMenu(null); setNewSpace(''); setError('');
+    };
+    const openDialog = (type, space) => {
+      setContextMenu(null);
+      setError('');
+      setNewSpace(type === 'rename' ? space : '');
+      setDialog({ type, space });
+    };
     const importFile = async (event) => {
       const selected = event.target.files?.[0];
       if (!selected) return;
@@ -154,7 +199,7 @@
       event.target.value = '';
     };
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
-    return h('main', { className: 'frame-root' },
+    return h('main', { className: 'frame-root', onClick: () => contextMenu && setContextMenu(null) },
       h('style', null, `
         .frame-root{font-family:inherit;color:var(--spice-text,#fff);padding:36px 40px 80px;max-width:1250px;margin:auto}
         .frame-root *{box-sizing:border-box}.frame-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:32px}
@@ -164,6 +209,16 @@
         .frame-button{background:var(--spice-card,#252525);border:1px solid rgba(255,255,255,.12);color:inherit;border-radius:7px;padding:9px 13px;font:inherit;font-size:13px;cursor:pointer}
         .frame-button:hover{background:var(--spice-button-disabled,#444)}.frame-button.primary{background:var(--spice-button,#1db954);color:var(--spice-button-text,#000);border-color:transparent;font-weight:700}
         .frame-tabs{display:flex;gap:6px;flex-wrap:wrap;padding-bottom:18px;border-bottom:1px solid rgba(255,255,255,.12);margin-bottom:28px}
+        .frame-tabs{align-items:center;transition:all .18s ease}.frame-tab{position:relative}.frame-tab .frame-button{white-space:nowrap}
+        .frame-plus{width:35px;height:35px;border-radius:50%;font-size:23px;line-height:1;padding:0;transition:transform .15s,background .15s}
+        .frame-plus:hover{transform:scale(1.08)}.frame-menu{position:fixed;z-index:99999;min-width:170px;padding:5px;background:var(--spice-card,#262626);border:1px solid #ffffff30;border-radius:9px;box-shadow:0 12px 32px #0008}
+        .frame-menu button{display:block;width:100%;text-align:left;border:0;background:transparent;color:inherit;padding:10px 12px;border-radius:6px;cursor:pointer}.frame-menu button:hover{background:#ffffff20}
+        .frame-dialog-overlay{position:fixed;inset:0;background:#0009;z-index:99998;display:flex;align-items:center;justify-content:center;padding:20px}
+        .frame-dialog{background:var(--spice-card,#242424);border:1px solid #ffffff2a;border-radius:14px;padding:24px;width:min(420px,100%);box-shadow:0 20px 65px #0008}
+        .frame-dialog h3{margin:0 0 10px}.frame-dialog p{font-size:13px;color:var(--spice-subtext,#bbb)}
+        .frame-dialog .frame-field{width:100%;margin:10px 0}.frame-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:12px}
+        .frame-workspace-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+        .frame-workspace-toolbar h2{margin:0;font-size:21px;letter-spacing:-.025em}
         .frame-tabs .selected{background:var(--spice-text,#fff);color:var(--spice-main,#111)}
         .frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}
         .frame-tile{min-height:142px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
@@ -175,8 +230,9 @@
         .frame-update{position:fixed;right:24px;bottom:105px;z-index:9999;width:min(360px,calc(100vw - 48px));background:var(--spice-card,#242424);box-shadow:0 12px 36px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:18px}.frame-update p{margin:8px 0 12px}.frame-update-actions{display:flex;gap:8px;flex-wrap:wrap}.frame-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px;line-height:1.5;padding:10px 0}.frame-error{color:#ffb4aa;font-size:12px;margin-top:14px}.frame-footer{margin-top:34px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
       `),
       h('header', { className: 'frame-header' },
-        h('div', null, h('div', { className: 'frame-eyebrow' }, 'FRAME / YOUR SPOTIFY'), h('h1', { className: 'frame-title' }, 'Your space.'), h('p', { className: 'frame-muted' }, 'Everything you actually use. Nothing you don’t.')),
-        h('div', { className: 'frame-actions' }, button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : ''))
+        h('div', null, h('div', { className: 'frame-eyebrow' }, 'FRAME / YOUR SPOTIFY'),
+          h('h1', { className: 'frame-title' }, 'Your space.'),
+          h('p', { className: 'frame-muted' }, 'Everything you actually use. Nothing you don’t.'))
       ),
       h('section', { className: 'frame-form', style: { marginTop: 0, marginBottom: 24, maxWidth: 'none' } },
         h('div', { className: 'frame-form-row', style: { alignItems: 'center', justifyContent: 'space-between', marginTop: 0 } },
@@ -187,7 +243,36 @@
           latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').slice(0, 6000)}` : 'Release notes are unavailable while offline.')
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
-        ...Object.keys(data.spaces).map(space => button(space, () => update(prev => ({ ...prev, active: space })), space === data.active ? 'selected' : ''))
+        ...Object.keys(data.spaces).map(space => h('div', { className: 'frame-tab', key: space,
+          onContextMenu: e => { e.preventDefault(); setContextMenu({ space, x: Math.min(e.clientX, window.innerWidth - 190), y: Math.min(e.clientY, window.innerHeight - 170) }); }
+        }, button(space, () => { setEditing(false); setFilter(''); update(prev => ({ ...prev, active: space })); }, space === data.active ? 'selected' : ''))),
+        h('button', { className: 'frame-button frame-plus', title: 'Create workspace', 'aria-label': 'Create workspace',
+          onClick: () => openDialog('create', '') }, '+')
+      ),
+      h('div', { className: 'frame-workspace-toolbar' },
+        h('h2', null, data.active),
+        button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : '')
+      ),
+      contextMenu && h('div', { className: 'frame-menu', style: { left: contextMenu.x, top: contextMenu.y },
+        onClick: e => e.stopPropagation() },
+        h('button', { onClick: () => openDialog('rename', contextMenu.space) }, 'Rename'),
+        h('button', { onClick: () => duplicateSpace(contextMenu.space) }, 'Duplicate'),
+        Object.keys(data.spaces).length > 1 && h('button', { onClick: () => openDialog('delete', contextMenu.space) }, 'Delete')
+      ),
+      dialog && h('div', { className: 'frame-dialog-overlay', onClick: () => setDialog(null) },
+        h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: submitDialog },
+          h('h3', null, dialog.type === 'create' ? 'Create workspace' : dialog.type === 'rename' ? 'Rename workspace' : 'Delete workspace?'),
+          dialog.type === 'delete'
+            ? h('p', null, `Delete "${dialog.space}" and its pinned items from FRAME? This cannot be undone.`)
+            : h('input', { className: 'frame-field', autoFocus: true, maxLength: 32, required: true,
+                placeholder: 'Workspace name', value: newSpace, onChange: e => setNewSpace(e.target.value) }),
+          error && h('p', { className: 'frame-error' }, error),
+          h('div', { className: 'frame-dialog-actions' },
+            button('Cancel', () => setDialog(null)),
+            h('button', { className: 'frame-button primary', type: 'submit' },
+              dialog.type === 'delete' ? 'Delete workspace' : dialog.type === 'rename' ? 'Save name' : 'Create')
+          )
+        )
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px' } }, h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' })),
       visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
@@ -210,32 +295,7 @@
           h('input', { className: 'frame-field', placeholder: 'Spotify link or URI', value: link, onChange: e => setLink(e.target.value), required: true }),
           h('button', { className: 'frame-button primary', type: 'submit' }, 'Add')
         )),
-        h('div', { className: 'frame-form-row' },
-          h('input', { className: 'frame-field', placeholder: 'New workspace name', value: newSpace, maxLength: 32, onChange: e => setNewSpace(e.target.value) }),
-          button('Create workspace', createSpace),
-          button('Duplicate workspace', () => {
-            const base = data.active + ' copy';
-            let candidate = base, n = 2;
-            while (data.spaces[candidate]) candidate = base + ' ' + n++;
-            if (Object.keys(data.spaces).length >= 12) { setError('Maximum 12 workspaces.'); return; }
-            const target = candidate.slice(0, 32);
-            if (data.spaces[target]) { setError('Choose a shorter workspace name first.'); return; }
-            update(prev => ({ ...prev, active: target, spaces: { ...prev.spaces, [target]: prev.spaces[prev.active].map(item => ({ ...item, id: item.id + '-copy-' + Date.now() })) } }));
-          }),
-          button('Rename workspace', () => {
-            const next = prompt('New workspace name', data.active)?.trim().slice(0, 32);
-            if (!next || (next !== data.active && data.spaces[next])) return;
-            update(prev => {
-              const spaces = {};
-              for (const [key, value] of Object.entries(prev.spaces)) spaces[key === prev.active ? next : key] = value;
-              return { ...prev, active: next, spaces };
-            });
-          }),
-          Object.keys(data.spaces).length > 1 && button('Delete current workspace', () => {
-            if (!confirm(`Delete ${data.active}?`)) return;
-            update(prev => { const spaces = { ...prev.spaces }; delete spaces[prev.active]; return { ...prev, spaces, active: Object.keys(spaces)[0] }; });
-          })
-        )
+
       ),
       h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()),
         h('input', { ref: file, type: 'file', accept: '.json,application/json', hidden: true, onChange: importFile }),
