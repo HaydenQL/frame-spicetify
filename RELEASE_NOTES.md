@@ -1,21 +1,23 @@
-## FRAME v0.1.7
+## FRAME v0.1.8
 
-### Workspace improvements
-- Drag pinned tiles to reorder them while editing a workspace. The arrow buttons remain available for precise or keyboard-friendly adjustments.
-- Rename pinned tiles with a custom FRAME dialog, without removing and re-adding them.
-- The right-click workspace menu is positioned in the viewport instead of inside Spotify's transformed layout.
+### Workspace and pin improvements
+- Reorder workspace tabs by dragging them, without opening an editor.
+- Reorder pinned tiles by dragging them at any time, without entering Edit workspace. Editing arrows remain available.
+- Edit an existing pin's display name and Spotify destination together in a custom FRAME dialog.
+- Show Spotify artwork on supported album, playlist, artist, track, show and episode pins when Spotify's public oEmbed thumbnail endpoint is available.
+- Use colorful gradient artwork with recognizable icons for library/search pins and as fallback when no thumbnail is available.
+- Larger, more visual pinned tiles and drag-target highlighting.
 
-### Updates and testing
-- Add a Test update notification button in the FRAME footer to preview the notification, release notes and confirmation dialog without launching the updater.
-- The global notification extension's version matches FRAME v0.1.7.
-- Bundle the notification extension with the verified app release, so the updated Windows updater can synchronize an already-installed extension and restore it if an update fails.
-- Clicking Update now directly launches the registered Windows updater, without a second confirmation dialog. Windows may still ask permission to open an external protocol.
+### Included from previous releases
+- Custom workspace dialogs and cursor-positioned right-click menus.
+- Update notification preview and direct Update Now action.
+- Local workspace backup export and import.
 
-### Test plan
-1. Before installing v0.1.7, check whether the current extension detects the new release.
-2. After installing, verify there is no false update alert for v0.1.7.
-3. In FRAME, use Test update notification, expand Release notes and click Test update button. The preview must not launch PowerShell.
-4. Edit a workspace, drag pins, rename a pin, then reopen FRAME to verify persistence.
-5. Right-click workspace tabs at different positions; test rename, duplicate and delete.
-6. Export and import a workspace backup.
-7. Before installing, click the real Update now notification. If Windows does not launch the updater, verify the frame-update://install protocol registration.
+### Test
+- Drag tabs into a new order and restart Spotify to verify persistence.
+- Drag pins without Edit workspace, and verify their order persists.
+- Edit an existing pin and change both its name and Spotify link.
+- Check artwork on several playlist/album pins and fallback artwork on Liked Songs, Search and Library.
+- Confirm workspace management, notification preview and release notes still work.
+
+Artwork availability depends on Spotify's oEmbed endpoint. No guarantee of a thumbnail for every Spotify URI.
