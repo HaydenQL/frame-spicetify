@@ -29,7 +29,7 @@
     #frame-update-dialog button.frame-primary{background:var(--spice-button,#1db954);color:var(--spice-button-text,#000);border:0;font-weight:700}
   `;
   document.head.appendChild(style);
-  function confirmUpdate(version) {
+  function confirmUpdate(version, preview = false) {
     document.getElementById('frame-update-dialog-backdrop')?.remove();
     const backdrop = document.createElement('div');
     backdrop.id = 'frame-update-dialog-backdrop';
@@ -42,20 +42,20 @@
     title.id = 'frame-update-dialog-title';
     title.textContent = 'Install FRAME ' + version + '?';
     const message = document.createElement('p');
-    message.textContent = 'FRAME will launch your local updater. Spotify may reload and briefly interrupt playback while the update is applied.';
+    message.textContent = preview ? 'Preview only. No files will change.' : 'FRAME will launch your local updater. Spotify may reload and briefly interrupt playback while the update is applied.';
     const actions = document.createElement('div');
     actions.className = 'frame-dialog-actions';
     const cancel = document.createElement('button');
     cancel.textContent = 'Not now';
     const install = document.createElement('button');
     install.className = 'frame-primary';
-    install.textContent = 'Update now';
+    install.textContent = preview ? 'Finish test' : 'Update now';
     const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
     const onKey = event => { if (event.key === 'Escape') close(); };
     cancel.addEventListener('click', close);
     install.addEventListener('click', () => {
       close();
-      window.location.href = 'frame-update://install';
+      if (!preview) window.location.href = 'frame-update://install';
     });
     backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
     document.addEventListener('keydown', onKey);
@@ -65,10 +65,10 @@
     document.body.appendChild(backdrop);
     cancel.focus();
   }
-  function notify(release) {
+  function notify(release, preview = false) {
     const old = document.getElementById('frame-update-toast');
     if (old) old.remove();
-    if (!compare(release.tag_name, VERSION) || localStorage.getItem(DISMISS_KEY) === release.tag_name) return;
+    if (!preview && (!compare(release.tag_name, VERSION) || localStorage.getItem(DISMISS_KEY) === release.tag_name)) return;
     const panel = document.createElement('aside');
     panel.id = 'frame-update-toast';
     panel.setAttribute('role', 'status');
@@ -91,15 +91,18 @@
       notesButton.textContent = notes.hidden ? 'Release notes' : 'Hide notes';
     });
     button('Update now', () => {
-      confirmUpdate(release.tag_name);
+      confirmUpdate(release.tag_name, preview);
     });
     button('Later', () => {
-      localStorage.setItem(DISMISS_KEY, release.tag_name);
+      if (!preview) localStorage.setItem(DISMISS_KEY, release.tag_name);
       panel.remove();
     });
     panel.append(title, info, notes, actions);
     document.body.appendChild(panel);
   }
+  window.addEventListener('frame:test-update-notification', () => {
+    notify({ tag_name: 'v9.9.9 (preview)', body: 'FRAME preview: release notes and confirmation. No files are changed.' }, true);
+  });
   async function check() {
     try {
       const response = await fetch('https://api.github.com/repos/' + REPO + '/releases/latest', { cache: 'no-store' });
