@@ -47,15 +47,27 @@ try {
   if ($files.Count -gt 30 -or ($files | Measure-Object Length -Sum).Sum -gt 3000000) { throw 'Release exceeds limits.' }
   if (Test-Path $backup) { Remove-Item $backup -Recurse -Force }
   if (Test-Path $app) { Copy-Item $app $backup -Recurse -Force }
+  $extensionPath = Join-Path $env:APPDATA 'spicetify\Extensions\frame-updates.js'
+  $extensionBackup = Join-Path $temp 'frame-updates.previous.js'
+  $extensionWasInstalled = Test-Path $extensionPath
+  if ($extensionWasInstalled) { Copy-Item $extensionPath $extensionBackup }
   try {
     if (Test-Path $app) { Remove-Item $app -Recurse -Force }
     Copy-Item $source $app -Recurse -Force
+    # Keep the already-enabled global extension in sync with FRAME.
+    # Only replace an extension the user has previously opted into installing.
+    if ($extensionWasInstalled -and (Test-Path (Join-Path $source 'frame-updates.js'))) {
+      Copy-Item (Join-Path $source 'frame-updates.js') $extensionPath -Force
+    }
     & spicetify apply
     if ($LASTEXITCODE -ne 0) { throw 'Spicetify apply failed.' }
     Set-Content -Path $stateFile -Value $latest.ToString() -NoNewline
     Write-Output "Installed FRAME $latest. Restart Spotify if the UI has not refreshed."
   } catch {
     if (Test-Path $app) { Remove-Item $app -Recurse -Force }
+    if ($extensionWasInstalled -and (Test-Path $extensionBackup)) {
+      Copy-Item $extensionBackup $extensionPath -Force
+    }
     if (Test-Path $backup) { Copy-Item $backup $app -Recurse -Force; & spicetify apply | Out-Null }
     throw
   }
