@@ -44,8 +44,11 @@ jobs:
             exit 1
           fi
           test -f frame/index.js
+          grep -q "FRAME_VERSION = '\${VERSION#v}'" frame/index.js || { echo 'FRAME_VERSION does not match release tag' >&2; exit 1; }
           test -f frame/manifest.json
           python3 -m json.tool frame/manifest.json >/dev/null
+          node --check frame/index.js
+          node --check extensions/frame-updates.js
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
           python3 - <<'PY'
           from pathlib import Path
@@ -79,8 +82,8 @@ jobs:
           fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
             gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 \
-              --title "FRAME ${VERSION}" --generate-notes --verify-tag
+              --title "FRAME ${VERSION}" --notes-file RELEASE_NOTES.md --verify-tag
           else
-            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
-              --title "FRAME ${VERSION}" --generate-notes --target "${GITHUB_SHA}"
+            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 \
+              --title "FRAME ${VERSION}" --notes-file RELEASE_NOTES.md --target "${GITHUB_SHA}"
           fi
