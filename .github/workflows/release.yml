@@ -1,0 +1,82 @@
+name: Publish FRAME release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (for example v0.1.2)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: frame-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Validate version and package
+        id: version
+        shell: bash
+        env:
+          DISPATCH_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          else
+            VERSION="${DISPATCH_VERSION}"
+          fi
+          if [[ ! "${VERSION}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Version must be vMAJOR.MINOR.PATCH" >&2
+            exit 1
+          fi
+          test -f frame/index.js
+          test -f frame/manifest.json
+          python3 -m json.tool frame/manifest.json >/dev/null
+          echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {'.js', '.json', '.css'}
+          files = [p for p in Path('frame').rglob('*') if p.is_file()]
+          if not files or len(files) > 30 or sum(p.stat().st_size for p in files) > 3_000_000:
+              raise SystemExit('Package size or file count violates updater limits')
+          if any(p.suffix not in allowed or p.is_symlink() for p in files):
+              raise SystemExit('Unexpected file type or symlink')
+          PY
+
+      - name: Build ZIP and checksum
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip -q -r frame-app.zip frame -i '*.js' '*.json' '*.css'
+          sha256sum frame-app.zip | awk '{print $1}' > frame-app.zip.sha256
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          if gh release view "${VERSION}" >/dev/null 2>&1; then
+            echo "Release ${VERSION} already exists. Refusing to overwrite it." >&2
+            exit 1
+          fi
+          gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
+            --title "FRAME ${VERSION}" \
+            --generate-notes \
+            --target "${GITHUB_SHA}" \
+            --verify-tag
