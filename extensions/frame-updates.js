@@ -4,7 +4,7 @@
   if (window.__FRAME_UPDATES__) return;
   window.__FRAME_UPDATES__ = true;
   const REPO = 'HaydenQL/frame-spicetify';
-  const VERSION = '0.1.7';
+  const VERSION = '0.1.8';
   const DISMISS_KEY = 'frame:dismissed-release';
   const compare = (a, b) => {
     const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
