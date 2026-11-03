@@ -83,11 +83,11 @@
     const [release, setRelease] = React.useState(null);
     const [latestNotes, setLatestNotes] = React.useState(null);
     const [notesOpen, setNotesOpen] = React.useState(false);
-    const [showNotes, setShowNotes] = React.useState(false);
-    const [dismissedVersion, setDismissedVersion] = React.useState('');
     React.useEffect(() => {
       let cancelled = false;
       let timer;
+      const cached = sessionStorage.getItem('frame:latest-notes');
+      if (cached) { try { setLatestNotes(JSON.parse(cached)); } catch (_) {} }
       const check = async () => {
         try {
           const response = await fetch(`https://api.github.com/repos/${UPDATE_REPO}/releases/latest`, {
@@ -97,6 +97,7 @@
           const result = await response.json();
           if (cancelled) return;
           setLatestNotes(result);
+          try { sessionStorage.setItem('frame:latest-notes', JSON.stringify(result)); } catch (_) {}
           const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
           const current = parse(FRAME_VERSION);
           const latest = parse(String(result.tag_name || ''));
@@ -225,7 +226,7 @@
         .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
         .frame-name{font-size:19px;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.frame-tile-actions{display:flex;gap:6px;margin-top:14px}
         .frame-tile .frame-button{padding:5px 9px;font-size:11px}.frame-form{margin-top:28px;padding:20px;background:var(--spice-card,#222);border-radius:10px;max-width:720px}
-        .frame-form h3{margin:0 0 14px}.frame-field{background:var(--spice-main,#111);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:10px 12px;min-width:0;flex:1;font:inherit;font-size:13px}
+        .frame-form h3{margin:0 0 10px}.frame-form{max-width:600px}.frame-form .frame-inputs{align-items:center}.frame-field{background:var(--spice-main,#111);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:10px 12px;min-width:0;flex:1;font:inherit;font-size:13px}
         .frame-inputs{display:flex;gap:8px;flex-wrap:wrap}.frame-form-row{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}.frame-empty{padding:50px 20px;text-align:center;border:1px dashed rgba(255,255,255,.2);border-radius:10px;color:var(--spice-subtext,#aaa)}
         .frame-update{position:fixed;right:24px;bottom:105px;z-index:9999;width:min(360px,calc(100vw - 48px));background:var(--spice-card,#242424);box-shadow:0 12px 36px rgba(0,0,0,.45);border:1px solid rgba(255,255,255,.2);border-radius:12px;padding:18px}.frame-update p{margin:8px 0 12px}.frame-update-actions{display:flex;gap:8px;flex-wrap:wrap}.frame-notes{white-space:pre-wrap;overflow-wrap:anywhere;max-height:240px;overflow:auto;font-size:12px;line-height:1.5;padding:10px 0}.frame-error{color:#ffb4aa;font-size:12px;margin-top:14px}.frame-footer{margin-top:34px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
       `),
@@ -240,7 +241,7 @@
           button(notesOpen ? 'Hide release notes' : 'View release notes', () => setNotesOpen(!notesOpen))
         ),
         notesOpen && h('div', { className: 'frame-notes' },
-          latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').slice(0, 6000)}` : 'Release notes are unavailable while offline.')
+          latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').replace(/^Full Changelog:.*$/gmi, '').trim().slice(0, 6000)}` : 'Release notes are unavailable while offline.')
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
         ...Object.keys(data.spaces).map(space => h('div', { className: 'frame-tab', key: space,
@@ -289,7 +290,8 @@
         )
       )) : h('div', { className: 'frame-empty' }, 'Nothing pinned here yet. Select Edit workspace to add something.'),
       editing && h('section', { className: 'frame-form' },
-        h('h3', null, 'Pin something'),
+        h('h3', null, 'Add a pin'),
+        h('p', { className: 'frame-muted' }, 'Paste a Spotify playlist, album, artist, or track link and give it a name.'),
         h('form', { onSubmit: add }, h('div', { className: 'frame-inputs' },
           h('input', { className: 'frame-field', placeholder: 'Display name', value: name, maxLength: 100, onChange: e => setName(e.target.value), required: true }),
           h('input', { className: 'frame-field', placeholder: 'Spotify link or URI', value: link, onChange: e => setLink(e.target.value), required: true }),
