@@ -254,7 +254,7 @@
         h('h2', null, data.active),
         button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : '')
       ),
-      contextMenu && h('div', { className: 'frame-menu', style: { left: contextMenu.x, top: contextMenu.y },
+      contextMenu && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-menu', style: { left: contextMenu.x, top: contextMenu.y },
         onClick: e => e.stopPropagation() },
         h('button', { onClick: () => openDialog('rename', contextMenu.space) }, 'Rename'),
         h('button', { onClick: () => duplicateSpace(contextMenu.space) }, 'Duplicate'),
