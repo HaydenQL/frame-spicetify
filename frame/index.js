@@ -299,7 +299,7 @@
         )),
 
       ),
-      h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()),
+      h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()), button('Test update notification', () => window.dispatchEvent(new Event('frame:test-update-notification'))),
         h('input', { ref: file, type: 'file', accept: '.json,application/json', hidden: true, onChange: importFile }),
         h('span', { className: 'frame-muted' }, `FRAME ${FRAME_VERSION} · Saved locally.`)
       ),
