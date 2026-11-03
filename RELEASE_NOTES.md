@@ -1,23 +1,18 @@
-## FRAME v0.1.5
+## FRAME v0.1.6
 
-### Workspace improvements
-- Create workspaces using the compact **+** button at the end of the workspace tabs.
-- Right-click any workspace tab for **Rename**, **Duplicate**, and **Delete**.
-- Rename and delete use FRAME's own dialogs instead of browser prompts.
-- The Edit workspace control now sits inside the active workspace header.
-- A clearer Add a pin form replaces the cluttered workspace management controls.
+### Update reliability
+- The FRAME release package now includes the global notification extension.
+- The updated Windows updater keeps an already-installed notification extension in sync with FRAME, avoiding false "update available" alerts after upgrades.
+- The updater backs up and restores the extension if installation fails.
+- The Update Now confirmation uses FRAME's custom modal instead of a browser confirm dialog.
 
-### Release notes and performance
-- Release notes appear directly in FRAME without opening GitHub.
-- Notes are cached during Spotify navigation to avoid reloading an empty panel each time.
-- FRAME removes auto-generated Full Changelog links from its release notes display.
-- The release workflow now checks the app's version and JavaScript syntax before publishing.
+### What to test
+- On v0.1.6, no v0.1.6 update notification should appear.
+- Verify the extension still works on Home, Search and FRAME.
+- Right-click workspace tabs for Rename, Duplicate and Delete.
+- Check custom rename/delete dialogs, search, pins and release notes.
 
-### Update system
-- The global notification extension remains opt-in and runs across Spotify views once installed.
-- The Update Now button launches the local Windows updater with confirmation.
-- Applying a FRAME update may still reload Spotify and interrupt playback.
-
-### Known limitations
-- Navigation between Spotify pages can still take time due to Spotify/Spicetify route rendering; this release improves notes loading but does not guarantee instant transitions.
-- The global extension currently embeds its version separately and needs an update to remain synchronized with future releases.
+### Limitations
+- The updated Windows updater script must be installed once to enable extension synchronization.
+- Spotify may reload when Spicetify applies an update.
+- Windows may show its own external-app protocol permission dialog when launching the updater; FRAME cannot suppress operating-system security prompts.
