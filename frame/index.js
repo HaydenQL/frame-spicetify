@@ -259,7 +259,7 @@
         h('button', { onClick: () => openDialog('rename', contextMenu.space) }, 'Rename'),
         h('button', { onClick: () => duplicateSpace(contextMenu.space) }, 'Duplicate'),
         Object.keys(data.spaces).length > 1 && h('button', { onClick: () => openDialog('delete', contextMenu.space) }, 'Delete')
-      ),
+      ), document.body),
       dialog && h('div', { className: 'frame-dialog-overlay', onClick: () => setDialog(null) },
         h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: submitDialog },
           h('h3', null, dialog.type === 'create' ? 'Create workspace' : dialog.type === 'rename' ? 'Rename workspace' : 'Delete workspace?'),
