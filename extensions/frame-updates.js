@@ -4,7 +4,7 @@
   if (window.__FRAME_UPDATES__) return;
   window.__FRAME_UPDATES__ = true;
   const REPO = 'HaydenQL/frame-spicetify';
-  const VERSION = '0.1.5';
+  const VERSION = '0.1.6';
   const DISMISS_KEY = 'frame:dismissed-release';
   const compare = (a, b) => {
     const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
@@ -21,8 +21,50 @@
     #frame-update-toast button{background:var(--spice-main,#151515);color:inherit;border:1px solid #7776;border-radius:7px;padding:8px 10px;cursor:pointer}
     #frame-update-toast button:hover{filter:brightness(1.3)}
     #frame-update-toast pre{white-space:pre-wrap;overflow-wrap:anywhere;max-height:200px;overflow:auto;font:12px/1.5 inherit}
+    #frame-update-dialog-backdrop{position:fixed;inset:0;z-index:2147483001;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;padding:20px}
+    #frame-update-dialog{width:min(430px,100%);padding:24px;background:var(--spice-card,#242424);color:var(--spice-text,#fff);border:1px solid rgba(255,255,255,.2);border-radius:14px;box-shadow:0 24px 70px #0009}
+    #frame-update-dialog h2{font-size:21px;margin:0 0 12px}#frame-update-dialog p{color:var(--spice-subtext,#bbb);font-size:13px;line-height:1.6}
+    #frame-update-dialog .frame-dialog-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:20px}
+    #frame-update-dialog button{border:1px solid #7776;background:var(--spice-main,#151515);color:inherit;border-radius:8px;padding:10px 14px;cursor:pointer}
+    #frame-update-dialog button.frame-primary{background:var(--spice-button,#1db954);color:var(--spice-button-text,#000);border:0;font-weight:700}
   `;
   document.head.appendChild(style);
+  function confirmUpdate(version) {
+    document.getElementById('frame-update-dialog-backdrop')?.remove();
+    const backdrop = document.createElement('div');
+    backdrop.id = 'frame-update-dialog-backdrop';
+    const dialog = document.createElement('section');
+    dialog.id = 'frame-update-dialog';
+    dialog.setAttribute('role', 'dialog');
+    dialog.setAttribute('aria-modal', 'true');
+    dialog.setAttribute('aria-labelledby', 'frame-update-dialog-title');
+    const title = document.createElement('h2');
+    title.id = 'frame-update-dialog-title';
+    title.textContent = 'Install FRAME ' + version + '?';
+    const message = document.createElement('p');
+    message.textContent = 'FRAME will launch your local updater. Spotify may reload and briefly interrupt playback while the update is applied.';
+    const actions = document.createElement('div');
+    actions.className = 'frame-dialog-actions';
+    const cancel = document.createElement('button');
+    cancel.textContent = 'Not now';
+    const install = document.createElement('button');
+    install.className = 'frame-primary';
+    install.textContent = 'Update now';
+    const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey); };
+    const onKey = event => { if (event.key === 'Escape') close(); };
+    cancel.addEventListener('click', close);
+    install.addEventListener('click', () => {
+      close();
+      window.location.href = 'frame-update://install';
+    });
+    backdrop.addEventListener('click', event => { if (event.target === backdrop) close(); });
+    document.addEventListener('keydown', onKey);
+    actions.append(cancel, install);
+    dialog.append(title, message, actions);
+    backdrop.appendChild(dialog);
+    document.body.appendChild(backdrop);
+    cancel.focus();
+  }
   function notify(release) {
     const old = document.getElementById('frame-update-toast');
     if (old) old.remove();
@@ -49,9 +91,7 @@
       notesButton.textContent = notes.hidden ? 'Release notes' : 'Hide notes';
     });
     button('Update now', () => {
-      if (confirm('Install FRAME ' + release.tag_name + '? Spotify may reload and interrupt playback.')) {
-        window.location.href = 'frame-update://install';
-      }
+      confirmUpdate(release.tag_name);
     });
     button('Later', () => {
       localStorage.setItem(DISMISS_KEY, release.tag_name);
