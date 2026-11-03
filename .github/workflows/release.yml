@@ -64,6 +64,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          cp extensions/frame-updates.js frame/frame-updates.js
           zip -q -r frame-app.zip frame -i '*.js' '*.json' '*.css'
           sha256sum frame-app.zip | awk '{print $1}' > frame-app.zip.sha256
           cp extensions/frame-updates.js frame-updates.js
