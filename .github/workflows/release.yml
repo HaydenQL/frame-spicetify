@@ -63,6 +63,8 @@ jobs:
           set -euo pipefail
           zip -q -r frame-app.zip frame -i '*.js' '*.json' '*.css'
           sha256sum frame-app.zip | awk '{print $1}' > frame-app.zip.sha256
+          cp extensions/frame-updates.js frame-updates.js
+          cp extensions/Install-FrameNotifications.ps1 Install-FrameNotifications.ps1
 
       - name: Publish GitHub release
         shell: bash
@@ -76,7 +78,7 @@ jobs:
             exit 1
           fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
+            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 \
               --title "FRAME ${VERSION}" --generate-notes --verify-tag
           else
             gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 \
