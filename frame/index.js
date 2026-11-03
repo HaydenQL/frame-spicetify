@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.7';
+  const FRAME_VERSION = '0.1.8';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -69,6 +69,30 @@
     a.href = url; a.download = 'frame-workspaces.json'; a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
+  const artworkCache = new Map();
+  function Artwork({ item }) {
+    const [url, setUrl] = React.useState(() => artworkCache.get(item.uri) || '');
+    React.useEffect(() => {
+      let alive = true;
+      setUrl(artworkCache.get(item.uri) || '');
+      const match = /^spotify:(playlist|album|artist|track|show|episode):([A-Za-z0-9]+)$/.exec(item.uri);
+      if (!match || artworkCache.has(item.uri)) return () => { alive = false; };
+      const controller = new AbortController();
+      fetch('https://open.spotify.com/oembed?url=' + encodeURIComponent('https://open.spotify.com/' + match[1] + '/' + match[2]), { signal: controller.signal })
+        .then(response => { if (!response.ok) throw Error('Artwork unavailable'); return response.json(); })
+        .then(info => {
+          const image = typeof info.thumbnail_url === 'string' && /^https:\/\//.test(info.thumbnail_url) ? info.thumbnail_url : '';
+          artworkCache.set(item.uri, image);
+          if (alive) setUrl(image);
+        }).catch(() => { artworkCache.set(item.uri, ''); });
+      return () => { alive = false; controller.abort(); };
+    }, [item.uri]);
+    const type = item.uri.split(':')[1];
+    const symbol = ({ playlist: '♫', album: '◉', artist: '✦', track: '♪', show: '◈', episode: '◈', collection: '♥', search: '⌕' })[type] || '♫';
+    return h('div', { className: 'frame-artwork frame-artwork-' + type },
+      url ? h('img', { src: url, alt: '', loading: 'lazy', referrerPolicy: 'no-referrer' }) : h('span', { 'aria-hidden': true }, symbol)
+    );
+  }
   function App() {
     const [data, setData] = React.useState(read);
     const [editing, setEditing] = React.useState(false);
@@ -84,6 +108,9 @@
     const [dragOver, setDragOver] = React.useState(null);
     const [pinRename, setPinRename] = React.useState(null);
     const [pinRenameValue, setPinRenameValue] = React.useState('');
+    const [pinLinkValue, setPinLinkValue] = React.useState('');
+    const tabDrag = React.useRef(null);
+    const [tabDrop, setTabDrop] = React.useState(null);
     const [release, setRelease] = React.useState(null);
     const [latestNotes, setLatestNotes] = React.useState(null);
     const [notesOpen, setNotesOpen] = React.useState(false);
@@ -136,11 +163,24 @@
       event.preventDefault();
       if (!pinRename) return;
       const value = pinRenameValue.trim().slice(0, 100);
-      if (!value) { setError('Pin name cannot be empty.'); return; }
+      const uri = extractUri(pinLinkValue) || (['spotify:collection:tracks','spotify:collection','spotify:search'].includes(pinLinkValue.trim()) ? pinLinkValue.trim() : null);
+      if (!value || !uri) { setError('Enter a name and valid Spotify link or URI.'); return; }
       update(prev => ({ ...prev, spaces: { ...prev.spaces,
-        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value } : item)
+        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value, uri, kind: uri.split(':')[1] } : item)
       } }));
-      setPinRename(null); setPinRenameValue(''); setError('');
+      setPinRename(null); setPinRenameValue(''); setPinLinkValue(''); setError('');
+    };
+    const reorderSpace = (from, to) => {
+      if (!from || !to || from === to) return;
+      update(prev => {
+        const entries = Object.entries(prev.spaces);
+        const source = entries.findIndex(([name]) => name === from);
+        const destination = entries.findIndex(([name]) => name === to);
+        if (source < 0 || destination < 0) return prev;
+        const [moved] = entries.splice(source, 1);
+        entries.splice(destination, 0, moved);
+        return { ...prev, spaces: Object.fromEntries(entries) };
+      });
     };
     const reorder = (from, to) => {
       if (from === null || from === to || from < 0 || to < 0) return;
@@ -247,8 +287,8 @@
         .frame-workspace-toolbar h2{margin:0;font-size:21px;letter-spacing:-.025em}
         .frame-tabs .selected{background:var(--spice-text,#fff);color:var(--spice-main,#111)}
         .frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}
-        .frame-tile{min-height:142px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
-        .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-tile[draggable=true]{cursor:grab}.frame-tile[draggable=true]:active{cursor:grabbing}.frame-tile.frame-drop-target{outline:2px solid var(--spice-button,#1db954);outline-offset:2px}.frame-drag-help{font-size:12px;color:var(--spice-subtext,#aaa);margin:0 0 12px}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
+        .frame-tile{min-height:225px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
+        .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-tab[draggable=true]{cursor:grab}.frame-tab.frame-tab-drop{outline:2px solid var(--spice-button,#1db954);border-radius:8px}.frame-artwork{height:124px;border-radius:9px;overflow:hidden;display:flex;align-items:center;justify-content:center;margin-bottom:13px;background:linear-gradient(135deg,#264a68,#37244d);font-size:62px;color:#fff;user-select:none}.frame-artwork img{height:100%;width:100%;object-fit:cover}.frame-artwork-collection{background:linear-gradient(135deg,#5a2ac5,#b24687)}.frame-artwork-search{background:linear-gradient(135deg,#225d55,#319f82)}.frame-artwork-artist{background:linear-gradient(135deg,#73442e,#b76a46)}.frame-artwork-album{background:linear-gradient(135deg,#263f7b,#895bb0)}.frame-artwork-track{background:linear-gradient(135deg,#205947,#438d73)}.frame-tile[draggable=true]{cursor:grab}.frame-tile[draggable=true]:active{cursor:grabbing}.frame-tile.frame-drop-target{outline:2px solid var(--spice-button,#1db954);outline-offset:2px}.frame-drag-help{font-size:12px;color:var(--spice-subtext,#aaa);margin:0 0 12px}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
         .frame-name{font-size:19px;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.frame-tile-actions{display:flex;gap:6px;margin-top:14px}
         .frame-tile .frame-button{padding:5px 9px;font-size:11px}.frame-form{margin-top:28px;padding:20px;background:var(--spice-card,#222);border-radius:10px;max-width:720px}
         .frame-form h3{margin:0 0 10px}.frame-form{max-width:600px}.frame-form .frame-inputs{align-items:center}.frame-field{background:var(--spice-main,#111);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:10px 12px;min-width:0;flex:1;font:inherit;font-size:13px}
@@ -269,8 +309,13 @@
           latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').replace(/^Full Changelog:.*$/gmi, '').trim().slice(0, 6000)}` : 'Release notes are unavailable while offline.')
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
-        ...Object.keys(data.spaces).map(space => h('div', { className: 'frame-tab', key: space,
-          onContextMenu: e => { e.preventDefault(); setContextMenu({ space, x: Math.min(e.clientX, window.innerWidth - 190), y: Math.min(e.clientY, window.innerHeight - 170) }); }
+        ...Object.keys(data.spaces).map(space => h('div', { className: 'frame-tab' + (tabDrop === space ? ' frame-tab-drop' : ''), key: space,
+          draggable: true,
+          onDragStart: e => { tabDrag.current = space; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', space); },
+          onDragOver: e => { if (tabDrag.current) { e.preventDefault(); setTabDrop(space); } },
+          onDrop: e => { e.preventDefault(); reorderSpace(tabDrag.current, space); tabDrag.current = null; setTabDrop(null); },
+          onDragEnd: () => { tabDrag.current = null; setTabDrop(null); },
+          onContextMenu: e => { e.preventDefault(); setContextMenu({ space, x: Math.max(8, Math.min(e.clientX, window.innerWidth - 190)), y: Math.max(8, Math.min(e.clientY, window.innerHeight - 170)) }); }
         }, button(space, () => { setEditing(false); setFilter(''); update(prev => ({ ...prev, active: space })); }, space === data.active ? 'selected' : ''))),
         h('button', { className: 'frame-button frame-plus', title: 'Create workspace', 'aria-label': 'Create workspace',
           onClick: () => openDialog('create', '') }, '+')
@@ -287,9 +332,10 @@
       ), document.body),
       pinRename && h('div', { className: 'frame-dialog-overlay', onClick: () => setPinRename(null) },
         h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: savePinName },
-          h('h3', null, 'Rename pin'),
+          h('h3', null, 'Edit pin'),
           h('input', { className: 'frame-field', autoFocus: true, maxLength: 100, required: true,
             'aria-label': 'Pin display name', value: pinRenameValue, onChange: e => setPinRenameValue(e.target.value) }),
+          h('input', { className: 'frame-field', maxLength: 500, required: true, placeholder: 'Spotify link or URI', 'aria-label': 'Pin Spotify link or URI', value: pinLinkValue, onChange: e => setPinLinkValue(e.target.value) }),
           error && h('p', { className: 'frame-error' }, error),
           h('div', { className: 'frame-dialog-actions' },
             button('Cancel', () => { setPinRename(null); setError(''); }),
@@ -313,19 +359,19 @@
         )
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px' } }, h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' })),
-      editing && items.length > 1 && h('p', { className: 'frame-drag-help' }, 'Drag pinned tiles to rearrange them, or use the arrow buttons.'),
+      items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Drag workspace tabs to reorder them too.'),
       visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
         h('article', { className: 'frame-tile' + (dragOver === i ? ' frame-drop-target' : ''), key: item.id,
-          draggable: editing && !filter.trim(),
-          onDragStart: e => { if (!editing || filter.trim()) { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
-          onDragOver: e => { if (editing && !filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
-          onDrop: e => { e.preventDefault(); if (editing && !filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
+          draggable: !filter.trim(),
+          onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
+          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
+          onDrop: e => { e.preventDefault(); if (!filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
-          h('div', null, h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
+          h('div', null, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
           editing ? h('div', { className: 'frame-tile-actions' },
             button('←', () => move(i, -1)), button('→', () => move(i, 1)),
-            button('Rename', () => { setPinRename(item.id); setPinRenameValue(item.name); setError(''); }),
+            button('Edit', () => { setPinRename(item.id); setPinRenameValue(item.name); setPinLinkValue(item.uri); setError(''); }),
             button('Remove', () => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].filter(x => x.id !== item.id) } })))
           ) : button('Open ↗', () => {
             const path = pathFromUri(item.uri);
