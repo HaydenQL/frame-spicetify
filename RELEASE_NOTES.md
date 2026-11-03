@@ -1,23 +1,17 @@
-## FRAME v0.1.8
+## FRAME v0.1.9
 
-### Workspace and pin improvements
-- Reorder workspace tabs by dragging them, without opening an editor.
-- Reorder pinned tiles by dragging them at any time, without entering Edit workspace. Editing arrows remain available.
-- Edit an existing pin's display name and Spotify destination together in a custom FRAME dialog.
-- Show Spotify artwork on supported album, playlist, artist, track, show and episode pins when Spotify's public oEmbed thumbnail endpoint is available.
-- Use colorful gradient artwork with recognizable icons for library/search pins and as fallback when no thumbnail is available.
-- Larger, more visual pinned tiles and drag-target highlighting.
+- Fetch actual Spotify playlist, album, artist, track, podcast and episode covers through Spicetify's authenticated Spotify API instead of the blocked public oEmbed endpoint.
+- Playlist metadata fallback through Spotify's internal Cosmos endpoint.
+- Optional custom HTTPS artwork URL for any pin.
+- Mark pins as favorites and sort favorites first.
+- Sort pins alphabetically or use custom drag order.
+- Compact layout toggle for more pins on screen.
+- Normal and large tile sizes per pin.
+- Duplicate pins in Edit workspace.
+- Undo the most recent pin removal.
+- Edit name, destination, artwork, favorite status and size in one dialog.
+- Keep workspace tab dragging and pin dragging from v0.1.8.
 
-### Included from previous releases
-- Custom workspace dialogs and cursor-positioned right-click menus.
-- Update notification preview and direct Update Now action.
-- Local workspace backup export and import.
+Testing: Verify real playlist covers on public and owned playlists; album and artist covers; edit a pin's custom image; favorites sorting; compact mode; duplicate/remove/undo; large tiles; and drag ordering after returning to Custom order.
 
-### Test
-- Drag tabs into a new order and restart Spotify to verify persistence.
-- Drag pins without Edit workspace, and verify their order persists.
-- Edit an existing pin and change both its name and Spotify link.
-- Check artwork on several playlist/album pins and fallback artwork on Liked Songs, Search and Library.
-- Confirm workspace management, notification preview and release notes still work.
-
-Artwork availability depends on Spotify's oEmbed endpoint. No guarantee of a thumbnail for every Spotify URI.
+Known limitation: Actual Spotify cover loading requires the embedded Spotify API to return images; custom URL images must be HTTPS. UI/runtime testing in Spotify is still required.
