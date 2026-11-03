@@ -44,7 +44,7 @@ jobs:
             exit 1
           fi
           test -f frame/index.js
-          grep -q "FRAME_VERSION = '\${VERSION#v}'" frame/index.js || { echo 'FRAME_VERSION does not match release tag' >&2; exit 1; }
+          grep -Fq "FRAME_VERSION = '${VERSION#v}'" frame/index.js || { echo 'FRAME_VERSION does not match release tag' >&2; exit 1; }
           test -f frame/manifest.json
           python3 -m json.tool frame/manifest.json >/dev/null
           node --check frame/index.js
