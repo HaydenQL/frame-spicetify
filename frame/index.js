@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.6';
+  const FRAME_VERSION = '0.1.7';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -80,6 +80,8 @@
     const [contextMenu, setContextMenu] = React.useState(null);
     const [filter, setFilter] = React.useState('');
     const file = React.useRef(null);
+    const dragIndex = React.useRef(null);
+    const [dragOver, setDragOver] = React.useState(null);
     const [release, setRelease] = React.useState(null);
     const [latestNotes, setLatestNotes] = React.useState(null);
     const [notesOpen, setNotesOpen] = React.useState(false);
@@ -128,6 +130,17 @@
       spaces[prev.active] = list;
       return { ...prev, spaces };
     });
+    const reorder = (from, to) => {
+      if (from === null || from === to || from < 0 || to < 0) return;
+      update(prev => {
+        const spaces = { ...prev.spaces }, list = [...spaces[prev.active]];
+        if (from >= list.length || to >= list.length) return prev;
+        const [moved] = list.splice(from, 1);
+        list.splice(to, 0, moved);
+        spaces[prev.active] = list;
+        return { ...prev, spaces };
+      });
+    };
     const add = (event) => {
       event.preventDefault();
       const uri = extractUri(link);
@@ -223,7 +236,7 @@
         .frame-tabs .selected{background:var(--spice-text,#fff);color:var(--spice-main,#111)}
         .frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}
         .frame-tile{min-height:142px;border:1px solid rgba(255,255,255,.11);border-radius:10px;background:var(--spice-card,#222);padding:19px;display:flex;flex-direction:column;justify-content:space-between;transition:background .15s}
-        .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
+        .frame-tile:hover{background:var(--spice-highlight-elevated,#333)}.frame-tile[draggable=true]{cursor:grab}.frame-tile[draggable=true]:active{cursor:grabbing}.frame-tile.frame-drop-target{outline:2px solid var(--spice-button,#1db954);outline-offset:2px}.frame-drag-help{font-size:12px;color:var(--spice-subtext,#aaa);margin:0 0 12px}.frame-kind{text-transform:uppercase;letter-spacing:.13em;font-size:10px;color:var(--spice-subtext,#aaa)}
         .frame-name{font-size:19px;font-weight:650;letter-spacing:-.025em;overflow-wrap:anywhere}.frame-tile-actions{display:flex;gap:6px;margin-top:14px}
         .frame-tile .frame-button{padding:5px 9px;font-size:11px}.frame-form{margin-top:28px;padding:20px;background:var(--spice-card,#222);border-radius:10px;max-width:720px}
         .frame-form h3{margin:0 0 10px}.frame-form{max-width:600px}.frame-form .frame-inputs{align-items:center}.frame-field{background:var(--spice-main,#111);color:inherit;border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:10px 12px;min-width:0;flex:1;font:inherit;font-size:13px}
@@ -252,7 +265,7 @@
       ),
       h('div', { className: 'frame-workspace-toolbar' },
         h('h2', null, data.active),
-        button(editing ? 'Done editing' : 'Edit workspace', () => setEditing(!editing), editing ? 'primary' : '')
+        button(editing ? 'Done editing' : 'Edit workspace', () => { setFilter(''); setEditing(!editing); }, editing ? 'primary' : '')
       ),
       contextMenu && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-menu', style: { left: contextMenu.x, top: contextMenu.y },
         onClick: e => e.stopPropagation() },
@@ -276,8 +289,15 @@
         )
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px' } }, h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' })),
+      editing && items.length > 1 && h('p', { className: 'frame-drag-help' }, 'Drag pinned tiles to rearrange them, or use the arrow buttons.'),
       visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
-        h('article', { className: 'frame-tile', key: item.id },
+        h('article', { className: 'frame-tile' + (dragOver === i ? ' frame-drop-target' : ''), key: item.id,
+          draggable: editing && !filter.trim(),
+          onDragStart: e => { if (!editing || filter.trim()) { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
+          onDragOver: e => { if (editing && !filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
+          onDrop: e => { e.preventDefault(); if (editing && !filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
+          onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
+        },
           h('div', null, h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
           editing ? h('div', { className: 'frame-tile-actions' },
             button('←', () => move(i, -1)), button('→', () => move(i, 1)),
