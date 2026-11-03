@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.1.3';
+  const FRAME_VERSION = '0.1.4';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -76,6 +76,7 @@
     const [link, setLink] = React.useState('');
     const [error, setError] = React.useState('');
     const [newSpace, setNewSpace] = React.useState('');
+    const [filter, setFilter] = React.useState('');
     const file = React.useRef(null);
     const [release, setRelease] = React.useState(null);
     const [showNotes, setShowNotes] = React.useState(false);
@@ -107,6 +108,7 @@
     }, []);
 
     const items = data.spaces[data.active] || [];
+    const visibleItems = items.map((item, index) => ({ item, index })).filter(({ item }) => (item.name + ' ' + item.kind).toLowerCase().includes(filter.toLowerCase()));
     const update = (fn) => setData(prev => {
       const next = normalize(fn(prev));
       try { write(next); } catch (_) { setError('Could not save locally. Check available storage.'); }
@@ -185,7 +187,8 @@
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
         ...Object.keys(data.spaces).map(space => button(space, () => update(prev => ({ ...prev, active: space })), space === data.active ? 'selected' : ''))
       ),
-      items.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...items.map((item, i) =>
+      h('div', { className: 'frame-form-row', style: { marginBottom: '18px' } }, h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' })),
+      visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
         h('article', { className: 'frame-tile', key: item.id },
           h('div', null, h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, item.name)),
           editing ? h('div', { className: 'frame-tile-actions' },
@@ -208,6 +211,24 @@
         h('div', { className: 'frame-form-row' },
           h('input', { className: 'frame-field', placeholder: 'New workspace name', value: newSpace, maxLength: 32, onChange: e => setNewSpace(e.target.value) }),
           button('Create workspace', createSpace),
+          button('Duplicate workspace', () => {
+            const base = data.active + ' copy';
+            let candidate = base, n = 2;
+            while (data.spaces[candidate]) candidate = base + ' ' + n++;
+            if (Object.keys(data.spaces).length >= 12) { setError('Maximum 12 workspaces.'); return; }
+            const target = candidate.slice(0, 32);
+            if (data.spaces[target]) { setError('Choose a shorter workspace name first.'); return; }
+            update(prev => ({ ...prev, active: target, spaces: { ...prev.spaces, [target]: prev.spaces[prev.active].map(item => ({ ...item, id: item.id + '-copy-' + Date.now() })) } }));
+          }),
+          button('Rename workspace', () => {
+            const next = prompt('New workspace name', data.active)?.trim().slice(0, 32);
+            if (!next || (next !== data.active && data.spaces[next])) return;
+            update(prev => {
+              const spaces = {};
+              for (const [key, value] of Object.entries(prev.spaces)) spaces[key === prev.active ? next : key] = value;
+              return { ...prev, active: next, spaces };
+            });
+          }),
           Object.keys(data.spaces).length > 1 && button('Delete current workspace', () => {
             if (!confirm(`Delete ${data.active}?`)) return;
             update(prev => { const spaces = { ...prev.spaces }; delete spaces[prev.active]; return { ...prev, spaces, active: Object.keys(spaces)[0] }; });
