@@ -169,6 +169,11 @@
     const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
     const [showShortcuts, setShowShortcuts] = React.useState(false);
     const [playbackError, setPlaybackError] = React.useState('');
+    const [themeBySpace, setThemeBySpace] = React.useState(() => { try { return JSON.parse(Spicetify.LocalStorage.get('frame:themes:v1') || '{}'); } catch (_) { return {}; } });
+    const [recentPins, setRecentPins] = React.useState(() => { try { return JSON.parse(Spicetify.LocalStorage.get('frame:recent:v1') || '[]'); } catch (_) { return []; } });
+    const [showQuick, setShowQuick] = React.useState(true);
+    const [artworkStatus, setArtworkStatus] = React.useState('');
+    const [diagnosing, setDiagnosing] = React.useState(false);
     const tabDrag = React.useRef(null);
     const [tabDrop, setTabDrop] = React.useState(null);
     const [release, setRelease] = React.useState(null);
@@ -254,13 +259,38 @@
         return { ...prev, spaces };
       });
     };
-    const openPin = item => { const path = pathFromUri(item.uri); if (path) Spicetify.Platform.History.push(path); else setError('This link could not be opened.'); };
+    const rememberPin = item => {
+      setRecentPins(prev => {
+        const next = [{ uri: item.uri, name: item.name, image: item.image || '' }, ...prev.filter(x => x.uri !== item.uri)].slice(0, 8);
+        try { Spicetify.LocalStorage.set('frame:recent:v1', JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+    };
+    const openPin = item => { const path = pathFromUri(item.uri); if (path) { rememberPin(item); Spicetify.Platform.History.push(path); } else setError('This link could not be opened.'); };
+    const setTheme = value => {
+      setThemeBySpace(prev => {
+        const next = { ...prev, [data.active]: value };
+        try { Spicetify.LocalStorage.set('frame:themes:v1', JSON.stringify(next)); } catch (_) {}
+        return next;
+      });
+    };
+    const diagnoseArtwork = async () => {
+      const sample = items.find(x => x.uri.startsWith('spotify:playlist:')) || items.find(x => /^spotify:(album|artist|track):/.test(x.uri));
+      if (!sample) { setArtworkStatus('Add a playlist, album or artist pin first.'); return; }
+      setDiagnosing(true);
+      try {
+        const result = await spotifyArtwork(sample.uri);
+        setArtworkStatus(result ? 'Spotify returned an artwork URL for "' + sample.name + '". If the tile still shows a note, the image may be blocked from loading.' : 'Spotify did not return artwork for "' + sample.name + '". This can be an API permission or metadata compatibility issue.');
+      } catch (e) { setArtworkStatus('Artwork request failed: ' + String(e?.message || e)); }
+      setDiagnosing(false);
+    };
     const playPin = async item => {
       try {
         const type = item.uri.split(':')[1];
         if (!['playlist','album','artist','track'].includes(type)) { openPin(item); return; }
         if (!Spicetify.Player?.playUri) throw Error('Spotify playback API unavailable');
         await Spicetify.Player.playUri(item.uri);
+        rememberPin(item);
         setPlaybackError('');
       } catch (_) { setPlaybackError('Could not start playback here. Open the pin to play it in Spotify.'); }
     };
@@ -346,10 +376,10 @@
       event.target.value = '';
     };
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
-    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), onClick: () => contextMenu && setContextMenu(null) },
+    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), style: { '--frame-accent': ({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954' }, onClick: () => contextMenu && setContextMenu(null) },
       h('style', null, `
         .frame-root{font-family:inherit;color:var(--spice-text,#fff);padding:36px 40px 80px;max-width:1250px;margin:auto}
-        .frame-root *{box-sizing:border-box}.frame-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:32px}
+        .frame-root *{box-sizing:border-box}.frame-root .frame-button.primary,.frame-root .frame-pin-play{background:var(--frame-accent,#1db954)}.frame-root .frame-tab.frame-tab-drop,.frame-root .frame-tile.frame-drop-target{outline-color:var(--frame-accent,#1db954)}.frame-quick{margin:0 0 20px;padding:14px;border-radius:12px;background:var(--spice-card,#252525)}.frame-quick h3{font-size:14px;margin:0 0 10px}.frame-quick-items{display:flex;gap:8px;flex-wrap:wrap}.frame-quick-item{border:1px solid #ffffff22;background:var(--spice-main,#151515);color:inherit;padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:12px}.frame-quick-item:hover{border-color:var(--frame-accent,#1db954)}.frame-theme-select{max-width:170px;flex:0 0 auto}.frame-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:32px}
         .frame-eyebrow{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--spice-subtext,#aaa)}
         .frame-title{font-size:clamp(36px,5vw,60px);font-weight:750;letter-spacing:-.055em;line-height:1.15;margin:9px 0}
         .frame-muted{color:var(--spice-subtext,#aaa);font-size:13px}.frame-actions{display:flex;gap:8px;flex-wrap:wrap}
@@ -388,6 +418,14 @@
         ),
         notesOpen && h('div', { className: 'frame-notes' },
           latestNotes ? `Latest: ${latestNotes.tag_name}\n\n${String(latestNotes.body || 'No release notes provided.').replace(/^Full Changelog:.*$/gmi, '').trim().slice(0, 6000)}` : 'Release notes are unavailable while offline.')
+      ),
+      h('section', { className: 'frame-form-row', style: { alignItems: 'center', marginBottom: 18 } },
+        h('label', { className: 'frame-muted' }, 'Workspace accent'),
+        h('select', { className: 'frame-field frame-theme-select', value: themeBySpace[data.active] || 'green', onChange: e => setTheme(e.target.value), 'aria-label': 'Workspace accent color' },
+          ...[['green','Spotify green'],['violet','Violet'],['blue','Blue'],['rose','Rose'],['amber','Amber']].map(([value,label]) => h('option', { key: value, value }, label))),
+        button(showQuick ? 'Hide quick access' : 'Show quick access', () => setShowQuick(!showQuick)),
+        button(diagnosing ? 'Checking artwork…' : 'Diagnose artwork', diagnoseArtwork),
+        artworkStatus && h('span', { className: 'frame-muted', role: 'status' }, artworkStatus)
       ),
       h('nav', { className: 'frame-tabs', 'aria-label': 'Workspaces' },
         ...Object.keys(data.spaces).map(space => h('div', { className: 'frame-tab' + (tabDrop === space ? ' frame-tab-drop' : ''), key: space,
@@ -442,6 +480,15 @@
               dialog.type === 'delete' ? 'Delete workspace' : dialog.type === 'rename' ? 'Save name' : 'Create')
           )
         )
+      ),
+      showQuick && h('section', { className: 'frame-quick', 'aria-label': 'Quick access' },
+        h('h3', null, 'Favorites across workspaces'),
+        h('div', { className: 'frame-quick-items' }, ...Object.entries(data.spaces).flatMap(([space, list]) => list.filter(x => x.favorite).map(item =>
+          h('button', { key: space + ':' + item.id, className: 'frame-quick-item', type: 'button', title: 'Open ' + item.name + ' from ' + space, onClick: () => openPin(item) }, '★ ' + item.name + ' · ' + space)))),
+        h('h3', { style: { marginTop: 14 } }, 'Recently opened in FRAME'),
+        h('div', { className: 'frame-quick-items' }, ...recentPins.map(item =>
+          h('button', { key: item.uri, className: 'frame-quick-item', type: 'button', onClick: () => openPin(item) }, '↗ ' + item.name))),
+        !recentPins.length && h('p', { className: 'frame-muted' }, 'Open a pin to start your recent list.')
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px', alignItems: 'center' } },
         h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' }),
