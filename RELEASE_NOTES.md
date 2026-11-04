@@ -1,3 +1,39 @@
+# FRAME v0.2.2
+
+## Changes
+- Pin editor and Add Pin now render as viewport-centered modal portals instead of scrolling away with FRAME content.
+- Add Pin is a full-size tile directly after the last pin. The small toolbar plus is removed.
+- Remove the redundant Favorite checkbox from the pin editor; use hover star or right-click.
+- Favorite pins stay first but can be reordered. Remove alphabetical sorting mode that prevented dragging.
+- Drag the bottom-left corner handle to adjust a pin width across one to three grid columns.
+- Denser pin cards with reduced dead space.
+- Upload a per-workspace background image. FRAME downsizes it and samples its colors to pick a matching accent.
+- Stronger accent tint on the page, pins, and selected Spotify content/sidebar containers where supported.
+- Experimental local update bridge: optional Windows helper listens only on 127.0.0.1, accepts Spotify-origin requests, starts the updater and reports status. The release includes frame-update-helper.zip with a double-click installer. This replaces relying on Spotify opening the blocked frame-update protocol.
+- Updater now checks the actual installed FRAME_VERSION to avoid stale installed-version.txt preventing installation.
+
+## Install update helper (once)
+1. Download frame-update-helper.zip from this release and extract it.
+2. Double-click Install-FrameBridge.cmd in the extracted folder. It installs the helper for the current Windows user and starts it.
+3. Restart Spotify and use Update now in the next release notification. The helper must be installed and running.
+4. If it fails, inspect %LOCALAPPDATA%\\FrameUpdater\\last-update.log and bridge.log. Do not run as administrator.
+
+## Focused tests
+- Right-click pin > Edit; dialog centered and scrollable at small window sizes.
+- Add Pin tile next to last pin; modal centered and visible.
+- Drag a starred pin to reorder it among favorites, unstar and drag again.
+- Drag bottom-left resize handle horizontally; tile width changes.
+- Upload workspace background; check color picker automatically changes and the left sidebar tint where supported.
+- Use Update now with helper installed; status should change from ready to installing to success or error.
+- Test at narrow Spotify window widths.
+
+## Known limitations
+- Local helper and installer have not been tested on Windows or inside Spotify; origin and Spotify client restrictions may require adjustment.
+- Width resizing is discrete grid columns, not pixel-perfect freeform resizing.
+- Background palette selection is approximate.
+- Automatic artist artwork remains an unresolved Spotify API integration issue.
+- Existing already-installed FRAME cannot install the Windows helper itself; one-time setup is required.
+
 # FRAME v0.2.1
 
 - Right-click any pin to Edit, Favorite/Unfavorite, Duplicate or Remove, without entering an editing mode.
