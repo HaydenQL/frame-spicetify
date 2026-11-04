@@ -275,18 +275,22 @@
         return { ...prev, spaces: Object.fromEntries(entries) };
       });
     };
-    const reorder = (sourceId, targetId) => {
+    const reorder = (sourceId, targetId, after = false) => {
       if (!sourceId || !targetId || sourceId === targetId) return;
       update(prev => {
         const list = [...prev.spaces[prev.active]].sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite));
         const from = list.findIndex(x => x.id === sourceId);
-        const to = list.findIndex(x => x.id === targetId);
-        if (from < 0 || to < 0) return prev;
+        const target = list.find(x => x.id === targetId);
+        if (from < 0 || !target) return prev;
         const [moved] = list.splice(from,1);
-        const destination = list.findIndex(x => x.id === targetId);
+        // Favorites must stay first. Dropping across groups places the tile
+        // at the nearest valid boundary instead of silently failing.
+        const targetIndex = list.findIndex(x => x.id === targetId);
+        let destination = targetIndex + (after ? 1 : 0);
+        const favorites = list.filter(x => x.favorite).length;
+        if (moved.favorite) destination = Math.min(destination,favorites);
+        else destination = Math.max(destination,favorites);
         list.splice(destination,0,moved);
-        // Persist favorites first, including after dragging or unfavoriting.
-        list.sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite));
         return { ...prev, spaces: { ...prev.spaces, [prev.active]: list } };
       });
     };
@@ -628,7 +632,7 @@
           draggable: !filter.trim(),
           onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = item.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
           onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(item.id); } },
-          onDrop: e => { e.preventDefault(); if (!filter.trim()) reorder(dragIndex.current, item.id); dragIndex.current = null; setDragOver(null); },
+          onDrop: e => { e.preventDefault(); const rect=e.currentTarget.getBoundingClientRect(); const after=e.clientX > rect.left + rect.width/2; if (!filter.trim()) reorder(dragIndex.current, item.id, after); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
           h('div', { className: 'frame-tile-click', role: 'link', tabIndex: 0, onClick: () => { if (dragIndex.current === null) openPin(item); }, onKeyDown: e => { if (e.key === 'Enter') openPin(item); } }, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name)),
