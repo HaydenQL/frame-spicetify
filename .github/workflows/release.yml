@@ -69,6 +69,7 @@ jobs:
           sha256sum frame-app.zip | awk '{print $1}' > frame-app.zip.sha256
           cp extensions/frame-updates.js frame-updates.js
           cp extensions/Install-FrameNotifications.ps1 Install-FrameNotifications.ps1
+          (cd updater && zip -q ../frame-update-helper.zip Frame-Bridge.ps1 Run-FrameUpdate.ps1 Update-Frame.ps1 Install-FrameBridge.ps1 Install-FrameBridge.cmd)
 
       - name: Publish GitHub release
         shell: bash
@@ -82,7 +83,7 @@ jobs:
             exit 1
           fi
           if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
-            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 \
+            gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 frame-update-helper.zip \
               --title "FRAME ${VERSION}" --notes-file RELEASE_NOTES.md --verify-tag
           else
             gh release create "${VERSION}" frame-app.zip frame-app.zip.sha256 frame-updates.js Install-FrameNotifications.ps1 \
