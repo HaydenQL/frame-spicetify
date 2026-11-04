@@ -57,7 +57,7 @@ try {
       } else { $status='404 Not Found'; $body=@{error='Unknown endpoint or invalid token'} }
       $json=ConvertTo-Json $body -Compress -Depth 4
       $bytes=[Text.Encoding]::UTF8.GetBytes($json)
-      $cors=if($allowed){"Access-Control-Allow-Origin: $origin`r`nAccess-Control-Allow-Methods: GET, POST, OPTIONS`r`nAccess-Control-Allow-Headers: X-Frame-Nonce, Content-Type`r`nVary: Origin`r`n"}else{''}
+      $cors=if($allowed){"Access-Control-Allow-Origin: $origin`r`nAccess-Control-Allow-Methods: GET, POST, OPTIONS`r`nAccess-Control-Allow-Headers: X-Frame-Nonce, Content-Type`r`nAccess-Control-Allow-Private-Network: true`r`nVary: Origin`r`n"}else{''}
       $head="HTTP/1.1 $status`r`nContent-Type: application/json`r`nCache-Control: no-store`r`nConnection: close`r`nX-Content-Type-Options: nosniff`r`n$cors"+"Content-Length: $($bytes.Length)`r`n`r`n"
       $headerBytes=[Text.Encoding]::ASCII.GetBytes($head)
       $stream.Write($headerBytes,0,$headerBytes.Length)
