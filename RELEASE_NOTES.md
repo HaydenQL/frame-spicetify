@@ -1,3 +1,30 @@
+# FRAME v0.2.1
+
+- Right-click any pin to Edit, Favorite/Unfavorite, Duplicate or Remove, without entering an editing mode.
+- Hover a pin for a favorite star and a bottom-right remove button. Favorites always sort ahead of other pins.
+- Replace Edit workspace with a + Add pin button.
+- Edit dialog scrolls within the viewport so lower fields remain accessible.
+- Upload a local image file as pin artwork. Images are resized to at most 480px and converted to compressed JPEG data URLs stored in FRAME's local workspace data. Keep exported backups private if artwork is sensitive.
+- Workspace accent colors now tint the homepage backdrop, pin cards, quick access panels and play buttons. Custom hex color picker included.
+- More compact tiles, reduced empty space and wider page layout.
+- Existing click-to-open, pin playback, drag-and-drop, local recents and cross-workspace favorites retained.
+
+## Focused tests for this release
+1. Right-click a pin and edit it; check dialog stays on screen and can scroll.
+2. Upload a JPG/PNG to a pin; save and confirm the image displays.
+3. Hover a pin to favorite it; verify it appears before nonfavorites.
+4. Hover to remove a pin, undo, then drag another pin.
+5. Add a pin with the + button, without Edit workspace.
+6. Change workspace accent and use Custom color; verify card/background tint changes.
+7. Verify clicking a tile opens its destination while the separate play button starts playback.
+8. Check right-click menus and star/remove controls on smaller Spotify windows.
+
+## Known limitations
+- Spotify artist/playlist automatic cover retrieval still depends on client APIs; this release does not guarantee artist artwork works.
+- Background image uploads, automatic palette extraction, and freeform corner-drag resizing are not included yet.
+- The embedded Spotify update button still may be blocked by Spotify; use the PowerShell fallback.
+- Not yet runtime-tested inside Spotify.
+
 ## FRAME v0.2.0
 
 - Remove pin movement arrows. Drag pins while Custom order is selected.
