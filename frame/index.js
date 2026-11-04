@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.2.3';
+  const FRAME_VERSION = '0.2.4';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -141,7 +141,7 @@
     const type = item.uri.split(':')[1];
     const symbol = ({ playlist: '♫', album: '◉', artist: '✦', track: '♪', show: '◈', episode: '◈', collection: '♥', search: '⌕' })[type] || '♫';
     return h('div', { className: 'frame-artwork frame-artwork-' + type },
-      url ? h('img', { src: url, alt: '', loading: 'lazy', onError: () => setUrl('') }) : h('span', { 'aria-hidden': true }, symbol)
+      url ? h('img', { src: url, alt: '', draggable: false, loading: 'lazy', onError: () => setUrl('') }) : h('span', { 'aria-hidden': true }, symbol)
     );
   }
   function App() {
@@ -163,6 +163,7 @@
     const file = React.useRef(null);
     const dragIndex = React.useRef(null);
     const [dragOver, setDragOver] = React.useState(null);
+    const [dragAfter, setDragAfter] = React.useState(false);
     const [pinRename, setPinRename] = React.useState(null);
     const [pinRenameValue, setPinRenameValue] = React.useState('');
     const [pinLinkValue, setPinLinkValue] = React.useState('');
@@ -396,13 +397,20 @@
     const playPin = async item => {
       try {
         const type = item.uri.split(':')[1];
-        if (!['playlist','album','artist','track'].includes(type)) { openPin(item); return; }
+        if (type === 'collection') {
+          const player = Spicetify.Platform?.PlayerAPI;
+          if (!player?.play) throw Error('Spotify collection playback API unavailable');
+          if (Spicetify.Player.setShuffle) await Spicetify.Player.setShuffle(shuffleOnPlay);
+          await player.play({ context_uri: 'spotify:collection:tracks', options: { skip_to: { track_index: 0 } } });
+          rememberPin(item); setPlaybackError(''); return;
+        }
+        if (!['playlist','album','artist','track'].includes(type)) { setPlaybackError('This pin does not support direct playback.'); return; }
         if (!Spicetify.Player?.playUri) throw Error('Spotify playback API unavailable');
         if (Spicetify.Player.setShuffle) await Spicetify.Player.setShuffle(shuffleOnPlay);
         await Spicetify.Player.playUri(item.uri);
         rememberPin(item);
         setPlaybackError('');
-      } catch (_) { setPlaybackError('Could not start playback here. Open the pin to play it in Spotify.'); }
+      } catch (err) { setPlaybackError('Could not play ' + item.name + ': ' + (err?.message || 'Spotify playback failed') + '.'); }
     };
     const removePin = id => {
       const snapshot = JSON.stringify(data);
@@ -488,6 +496,9 @@
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
     return h('main', { className: 'frame-root', style: { '--frame-accent': themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : (({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954'), backgroundImage: backgrounds[data.active] ? 'linear-gradient(180deg,#080808b8,#080808ed),url(' + backgrounds[data.active] + ')' : undefined, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }, onClick: () => { if(contextMenu) setContextMenu(null); if(pinMenu) setPinMenu(null); } },
       h('style', null, `
+        /* 0.2.4 responsive tile layout: override older fixed artwork sizing. */
+        .frame-root .frame-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));align-items:start;grid-auto-flow:row dense}.frame-root .frame-tile{position:relative;display:flex;flex-direction:column;min-height:150px;min-width:0;overflow:hidden;isolation:isolate}.frame-root .frame-tile .frame-tile-click{position:relative;display:flex;flex:1 1 auto;min-height:0;min-width:0;flex-direction:column;cursor:pointer;overflow:hidden}.frame-root .frame-tile:not(.frame-cover-tile) .frame-artwork{flex:1 1 auto;min-height:36px;max-height:none;height:auto;width:100%;aspect-ratio:auto;overflow:hidden}.frame-root .frame-tile:not(.frame-cover-tile) .frame-artwork img{width:100%;height:100%;object-fit:cover}.frame-root .frame-tile .frame-tile-labels{flex:0 0 auto;min-width:0;padding:6px 0 0}.frame-root .frame-tile .frame-tile-footer{position:relative;z-index:4;flex:0 0 auto;display:flex;justify-content:flex-end;padding:4px 0 0;margin:0}.frame-root .frame-cover-tile .frame-tile-click{position:static;display:block;overflow:visible;flex:1 1 auto}.frame-root .frame-cover-tile .frame-artwork{position:absolute;inset:0;width:100%;height:100%;max-height:none;aspect-ratio:auto;margin:0;z-index:-1}.frame-root .frame-cover-tile .frame-artwork img{width:100%;height:100%;object-fit:cover}.frame-root .frame-cover-tile:before{z-index:0;background:linear-gradient(to bottom,rgba(0,0,0,.16) 0%,rgba(0,0,0,.06) 30%,rgba(0,0,0,.82) 100%)}.frame-root .frame-cover-tile .frame-tile-labels{position:absolute;left:12px;right:12px;bottom:49px;z-index:2;padding:0}.frame-root .frame-cover-tile .frame-kind{margin:0}.frame-root .frame-cover-tile .frame-tile-footer{z-index:4}.frame-root .frame-pin-delete{z-index:6;bottom:7px;right:40px;width:29px;height:29px;font-size:19px;font-weight:700;line-height:1;border:1px solid #ffffff55;background:#201616ed;color:#fff;opacity:0;box-shadow:0 2px 8px #0008}.frame-root .frame-tile:hover .frame-pin-delete,.frame-root .frame-pin-delete:focus-visible{opacity:1;background:#9c3030}.frame-root .frame-pin-resize{z-index:6}.frame-root .frame-tile.frame-drop-before{box-shadow:inset 4px 0 var(--frame-accent),0 0 0 1px var(--frame-accent)}.frame-root .frame-tile.frame-drop-after{box-shadow:inset -4px 0 var(--frame-accent),0 0 0 1px var(--frame-accent)}.frame-root .frame-tile .frame-artwork img{pointer-events:none}
+
         .frame-resize-outline{position:fixed;z-index:2147483000;pointer-events:none;border:2px dashed #1db954;background:#ffffff1a;box-sizing:border-box;border-radius:10px}.frame-resize-outline span{position:absolute;bottom:-28px;right:0;background:#111;color:#fff;padding:3px 8px;border-radius:5px;font-size:11px}.frame-root .frame-pin-resize{left:auto;right:7px;bottom:7px;cursor:nwse-resize;opacity:.8}.frame-root .frame-pin-delete{right:38px}.frame-root .frame-tile{overflow:hidden;min-height:150px}.frame-root .frame-cover-tile .frame-artwork{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;margin:0;z-index:0}.frame-root .frame-cover-tile .frame-artwork img{width:100%;height:100%;object-fit:cover}.frame-root .frame-cover-tile:before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#0003 10%,#0001 32%,#000e 100%);z-index:1;pointer-events:none}.frame-root .frame-cover-tile .frame-kind,.frame-root .frame-cover-tile .frame-name{position:relative;z-index:2;text-shadow:0 1px 4px #000,0 2px 12px #000}.frame-root .frame-cover-tile .frame-kind{margin-top:65px}.frame-root .frame-cover-tile .frame-tile-footer,.frame-root .frame-cover-tile .frame-pin-star,.frame-root .frame-cover-tile .frame-pin-delete,.frame-root .frame-cover-tile .frame-pin-resize{z-index:3}
 
         .frame-modal-overlay{position:fixed;inset:0;z-index:2147483640;display:flex;align-items:center;justify-content:center;padding:20px;background:#000b;overflow:auto}.frame-modal-panel{width:min(460px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;background:var(--spice-card,#262626);border:1px solid #ffffff30;border-radius:14px;padding:24px;box-shadow:0 24px 80px #000b;color:var(--spice-text,#fff);margin:auto}.frame-modal-panel .frame-field{display:block;width:100%;margin:10px 0}.frame-modal-panel .frame-inputs{display:flex;flex-direction:column;align-items:stretch;gap:10px}.frame-modal-panel .frame-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.frame-modal-panel h3{margin:0 0 15px}.frame-modal-panel input[type=file]{max-width:100%}.frame-add-tile{min-height:185px;border:2px dashed color-mix(in srgb,var(--frame-accent) 55%,#666);background:color-mix(in srgb,var(--frame-accent) 7%,#171717);color:inherit;border-radius:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px}.frame-add-tile span{font-size:44px;line-height:1}.frame-add-tile small{font-size:13px}.frame-add-tile:hover{background:color-mix(in srgb,var(--frame-accent) 19%,#171717)}.frame-pin-resize{position:absolute;bottom:6px;left:6px;z-index:4;opacity:0;background:#111a;color:white;border:0;border-radius:5px;cursor:ew-resize;touch-action:none}.frame-tile:hover .frame-pin-resize,.frame-pin-resize:focus-visible{opacity:1}.frame-root .frame-tile{display:flex;flex-direction:column}.frame-root .frame-tile .frame-tile-click{flex:0 0 auto}.frame-root .frame-tile .frame-tile-footer{margin-top:auto;padding-top:4px}.frame-root .frame-tile .frame-artwork{aspect-ratio:2.3}.frame-root .frame-tile{min-height:185px}.frame-root .frame-grid{grid-auto-flow:row dense}
@@ -627,15 +638,15 @@
       playbackError && h('p', { className: 'frame-error' }, playbackError),
       items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Favorites stay at the top. Drag workspace tabs to reorder them too.'),
       h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
-        h('article', { className: 'frame-tile' + (item.cover ? ' frame-cover-tile' : '') + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === item.id ? ' frame-drop-target' : ''), key: item.id, 'data-frame-pin': item.id, style: { gridColumn: 'span ' + (item.width || (item.size === 'large' ? 2 : 1)), height: (item.height || 195) + 'px' },
+        h('article', { className: 'frame-tile' + (item.cover ? ' frame-cover-tile' : '') + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === item.id ? (dragAfter ? ' frame-drop-after' : ' frame-drop-before') : ''), key: item.id, 'data-frame-pin': item.id, style: { gridColumn: 'span ' + (item.width || (item.size === 'large' ? 2 : 1)), height: (item.height || 195) + 'px' },
           onContextMenu: e => { e.preventDefault(); setPinMenu({ item, x: Math.min(e.clientX,window.innerWidth-190), y: Math.min(e.clientY,window.innerHeight-190) }); },
           draggable: !filter.trim(),
-          onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = item.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
-          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(item.id); } },
-          onDrop: e => { e.preventDefault(); const rect=e.currentTarget.getBoundingClientRect(); const after=e.clientX > rect.left + rect.width/2; if (!filter.trim()) reorder(dragIndex.current, item.id, after); dragIndex.current = null; setDragOver(null); },
+          onDragStart: e => { if (filter.trim() || e.target.closest('button')) { e.preventDefault(); return; } dragIndex.current = item.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
+          onDragOver: e => { if (!filter.trim()) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; const rect=e.currentTarget.getBoundingClientRect(); const after=e.clientX>rect.left+rect.width/2; setDragOver(prev=>prev===item.id?prev:item.id); setDragAfter(prev=>prev===after?prev:after); } },
+          onDrop: e => { e.preventDefault(); e.stopPropagation(); const rect=e.currentTarget.getBoundingClientRect(); const after=e.clientX > rect.left + rect.width/2; const source=dragIndex.current || e.dataTransfer.getData('text/plain'); if (!filter.trim()) reorder(source, item.id, after); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
-          h('div', { className: 'frame-tile-click', role: 'link', tabIndex: 0, onClick: () => { if (dragIndex.current === null) openPin(item); }, onKeyDown: e => { if (e.key === 'Enter') openPin(item); } }, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name)),
+          h('div', { className: 'frame-tile-click', role: 'link', tabIndex: 0, onClick: () => { if (dragIndex.current === null) openPin(item); }, onKeyDown: e => { if (e.key === 'Enter') openPin(item); } }, h(Artwork, { item }), h('div', { className: 'frame-tile-labels' }, h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name))),
           h('button', { className: 'frame-pin-star' + (item.favorite ? ' is-favorite' : ''), title: item.favorite ? 'Unfavorite' : 'Favorite', 'aria-label': item.favorite ? 'Unfavorite' : 'Favorite', type: 'button', onClick: e => { e.stopPropagation(); toggleFavorite(item); } }, item.favorite ? '★' : '☆'),
           h('div', { className: 'frame-tile-footer' }, h('button', { className: 'frame-pin-play', type: 'button', title: 'Play ' + item.name, 'aria-label': 'Play ' + item.name, onClick: e => { e.stopPropagation(); playPin(item); } }, '▶')),
           h('button', { className: 'frame-pin-resize', draggable: false, title: 'Drag to resize width and height', 'aria-label': 'Resize tile', type: 'button', onPointerDown: e => startResize(e,item), onClick: e => e.stopPropagation() }, '◢'),
