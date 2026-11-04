@@ -15,9 +15,17 @@ if ($release.draft -or $release.prerelease -or $release.tag_name -notmatch '^v(\
 $latest = [version](($Matches[1], $Matches[2], $Matches[3]) -join '.')
 $currentText = if (Test-Path $stateFile) { (Get-Content $stateFile -Raw).Trim() } else { '0.1.0' }
 try { $current = [version]($currentText.TrimStart('v')) } catch { $current = [version]'0.0.0' }
-if ($latest -le $current) { Write-Output "FRAME is current ($current)."; exit 0 }
+# Prefer the actual installed application version over a potentially stale marker.
+$installedIndex = Join-Path $app 'index.js'
+if (Test-Path $installedIndex) {
+  $installedSource = Get-Content $installedIndex -Raw
+  if ($installedSource -match "FRAME_VERSION\\s*=\\s*'([0-9]+\\.[0-9]+\\.[0-9]+)'") {
+    try { $current = [version]$Matches[1] } catch {}
+  }
+}
+if ($latest -le $current) { Write-Output "FRAME is current ($current)."; return }
 Write-Output "FRAME update available: $latest"
-if ($CheckOnly) { exit 0 }
+if ($CheckOnly) { return }
 $zipAsset = @($release.assets | Where-Object name -eq 'frame-app.zip') | Select-Object -First 1
 $hashAsset = @($release.assets | Where-Object name -eq 'frame-app.zip.sha256') | Select-Object -First 1
 if (!$zipAsset -or !$hashAsset) { throw 'Release must contain frame-app.zip and frame-app.zip.sha256.' }
