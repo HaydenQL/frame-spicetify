@@ -4,7 +4,7 @@
   if (window.__FRAME_UPDATES__) return;
   window.__FRAME_UPDATES__ = true;
   const REPO = 'HaydenQL/frame-spicetify';
-  const VERSION = '0.2.1';
+  const VERSION = '0.2.2';
   const DISMISS_KEY = 'frame:dismissed-release';
   const compare = (a, b) => {
     const parse = v => /^v?\d+\.\d+\.\d+$/.test(v) ? v.replace(/^v/, '').split('.').map(Number) : null;
@@ -29,15 +29,30 @@
     #frame-update-dialog button.frame-primary{background:var(--spice-button,#1db954);color:var(--spice-button-text,#000);border:0;font-weight:700}
   `;
   document.head.appendChild(style);
-  function launchUpdate() {
-    // A direct click-triggered external-protocol navigation is more reliable
-    // than navigating after a second modal interaction.
-    const link = document.createElement('a');
-    link.href = 'frame-update://install';
-    link.style.display = 'none';
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  const BRIDGE = 'http://127.0.0.1:43891';
+  async function launchUpdate(info) {
+    // A local helper, when installed, gives an actual update status instead of
+    // relying on Spotify's blocked external-protocol navigation.
+    try {
+      const response = await fetch(BRIDGE + '/status', { cache: 'no-store', signal: AbortSignal.timeout(2500) });
+      if (!response.ok) throw Error('FRAME update helper is unavailable');
+      const state = await response.json();
+      if (!state.nonce) throw Error('FRAME helper handshake failed');
+      const started = await fetch(BRIDGE + '/install', {
+        method: 'POST', headers: { 'X-Frame-Nonce': state.nonce }, signal: AbortSignal.timeout(4000)
+      });
+      if (!started.ok && started.status !== 409) throw Error('FRAME helper rejected the update');
+      info.textContent = 'Updating FRAME… You can keep listening. Installation status will appear here.';
+      for (let i=0;i<90;i++) {
+        await new Promise(resolve => setTimeout(resolve,2000));
+        const progress = await fetch(BRIDGE + '/status', { cache: 'no-store' }).then(r => r.json());
+        info.textContent = progress.message || progress.status;
+        if (progress.status === 'success' || progress.status === 'error') return;
+      }
+      info.textContent = 'Update is still running. Check the helper log if it does not finish.';
+    } catch (error) {
+      info.textContent = 'One-click updater unavailable: ' + (error?.message || 'helper not connected') + '. Install the FRAME update helper once to enable reliable in-app updates.';
+    }
   }
   const manualCommand = 'cd "$env:LOCALAPPDATA\\FrameUpdater"; .\\Update-Frame.ps1';
   function notify(release, preview = false) {
@@ -71,8 +86,7 @@
         if (info) info.textContent = 'Test successful. A real update would launch the Windows updater now.';
         return;
       }
-      launchUpdate();
-      info.textContent = 'Requested Windows updater launch. Spotify cannot confirm it started. If nothing happens, use Copy PowerShell command below.';
+      launchUpdate(info);
     });
     button('Copy PowerShell command', async () => {
       if (preview) { info.textContent = 'Preview only. No command copied.'; return; }
