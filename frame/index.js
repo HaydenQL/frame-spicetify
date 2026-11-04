@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.2.2';
+  const FRAME_VERSION = '0.2.3';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -171,7 +171,8 @@
     const [pinSizeValue, setPinSizeValue] = React.useState('normal');
     
     
-    const [compact, setCompact] = React.useState(false);
+    const [resizePreview, setResizePreview] = React.useState(null);
+    const [shuffleOnPlay, setShuffleOnPlay] = React.useState(() => Spicetify.LocalStorage.get('frame:shuffle:v1') === 'true');
     const [undo, setUndo] = React.useState(null);
     const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
     const [showShortcuts, setShowShortcuts] = React.useState(false);
@@ -289,7 +290,25 @@
         return { ...prev, spaces: { ...prev.spaces, [prev.active]: list } };
       });
     };
-    const resizePin = (id, width) => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].map(x => x.id === id ? { ...x, width: Math.max(1,Math.min(3,width)) } : x) } }));
+    const resizePin = (id, width, height) => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].map(x => x.id === id ? { ...x, width: Math.max(1,Math.min(4,width)), height: Math.max(150,Math.min(560,height)) } : x) } }));
+    const startResize = (event, item) => {
+      event.stopPropagation(); event.preventDefault();
+      const node = event.currentTarget.closest('.frame-tile'); if (!node) return;
+      const grid = node.parentElement, styles = getComputedStyle(grid);
+      const columns = styles.gridTemplateColumns.split(' ').filter(Boolean).length || 1;
+      const gap = parseFloat(styles.columnGap) || 10;
+      const unit = (grid.clientWidth - gap*(columns-1))/columns + gap;
+      const startX = event.clientX, startY = event.clientY;
+      const startWidth = item.width || (item.size === 'large' ? 2 : 1);
+      const startHeight = item.height || Math.round(node.getBoundingClientRect().height);
+      let last = { id:item.id,width:startWidth,height:startHeight };
+      setResizePreview(last);
+      const move = e => { last = { id:item.id,width:Math.max(1,Math.min(columns,4,startWidth+Math.round((e.clientX-startX)/unit))),height:Math.max(150,Math.min(560,Math.round((startHeight+e.clientY-startY)/10)*10)) }; setResizePreview(last); };
+      const finish = e => { window.removeEventListener('pointermove',move); window.removeEventListener('pointerup',finish); window.removeEventListener('pointercancel',finish); if(e.type==='pointerup')resizePin(item.id,last.width,last.height); setResizePreview(null); };
+      window.addEventListener('pointermove',move);window.addEventListener('pointerup',finish);window.addEventListener('pointercancel',finish);
+    };
+    const toggleCover = item => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].map(x => x.id === item.id ? { ...x, cover: !x.cover } : x) } }));
+    const toggleShuffle = () => setShuffleOnPlay(prev => { const next=!prev;try{Spicetify.LocalStorage.set('frame:shuffle:v1',String(next));}catch(_){}return next; });
     const rememberPin = item => {
       setRecentPins(prev => {
         const next = [{ uri: item.uri, name: item.name, image: item.image || '' }, ...prev.filter(x => x.uri !== item.uri)].slice(0, 8);
@@ -375,6 +394,7 @@
         const type = item.uri.split(':')[1];
         if (!['playlist','album','artist','track'].includes(type)) { openPin(item); return; }
         if (!Spicetify.Player?.playUri) throw Error('Spotify playback API unavailable');
+        if (Spicetify.Player.setShuffle) await Spicetify.Player.setShuffle(shuffleOnPlay);
         await Spicetify.Player.playUri(item.uri);
         rememberPin(item);
         setPlaybackError('');
@@ -462,8 +482,10 @@
       event.target.value = '';
     };
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
-    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), style: { '--frame-accent': themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : (({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954'), backgroundImage: backgrounds[data.active] ? 'linear-gradient(180deg,#080808b8,#080808ed),url(' + backgrounds[data.active] + ')' : undefined, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }, onClick: () => { if(contextMenu) setContextMenu(null); if(pinMenu) setPinMenu(null); } },
+    return h('main', { className: 'frame-root', style: { '--frame-accent': themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : (({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954'), backgroundImage: backgrounds[data.active] ? 'linear-gradient(180deg,#080808b8,#080808ed),url(' + backgrounds[data.active] + ')' : undefined, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }, onClick: () => { if(contextMenu) setContextMenu(null); if(pinMenu) setPinMenu(null); } },
       h('style', null, `
+        .frame-resize-outline{position:fixed;z-index:2147483000;pointer-events:none;border:2px dashed #1db954;background:#ffffff1a;box-sizing:border-box;border-radius:10px}.frame-resize-outline span{position:absolute;bottom:-28px;right:0;background:#111;color:#fff;padding:3px 8px;border-radius:5px;font-size:11px}.frame-root .frame-pin-resize{left:auto;right:7px;bottom:7px;cursor:nwse-resize;opacity:.8}.frame-root .frame-pin-delete{right:38px}.frame-root .frame-tile{overflow:hidden;min-height:150px}.frame-root .frame-cover-tile .frame-artwork{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;margin:0;z-index:0}.frame-root .frame-cover-tile .frame-artwork img{width:100%;height:100%;object-fit:cover}.frame-root .frame-cover-tile:before{content:'';position:absolute;inset:0;background:linear-gradient(180deg,#0003 10%,#0001 32%,#000e 100%);z-index:1;pointer-events:none}.frame-root .frame-cover-tile .frame-kind,.frame-root .frame-cover-tile .frame-name{position:relative;z-index:2;text-shadow:0 1px 4px #000,0 2px 12px #000}.frame-root .frame-cover-tile .frame-kind{margin-top:65px}.frame-root .frame-cover-tile .frame-tile-footer,.frame-root .frame-cover-tile .frame-pin-star,.frame-root .frame-cover-tile .frame-pin-delete,.frame-root .frame-cover-tile .frame-pin-resize{z-index:3}
+
         .frame-modal-overlay{position:fixed;inset:0;z-index:2147483640;display:flex;align-items:center;justify-content:center;padding:20px;background:#000b;overflow:auto}.frame-modal-panel{width:min(460px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;background:var(--spice-card,#262626);border:1px solid #ffffff30;border-radius:14px;padding:24px;box-shadow:0 24px 80px #000b;color:var(--spice-text,#fff);margin:auto}.frame-modal-panel .frame-field{display:block;width:100%;margin:10px 0}.frame-modal-panel .frame-inputs{display:flex;flex-direction:column;align-items:stretch;gap:10px}.frame-modal-panel .frame-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.frame-modal-panel h3{margin:0 0 15px}.frame-modal-panel input[type=file]{max-width:100%}.frame-add-tile{min-height:185px;border:2px dashed color-mix(in srgb,var(--frame-accent) 55%,#666);background:color-mix(in srgb,var(--frame-accent) 7%,#171717);color:inherit;border-radius:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px}.frame-add-tile span{font-size:44px;line-height:1}.frame-add-tile small{font-size:13px}.frame-add-tile:hover{background:color-mix(in srgb,var(--frame-accent) 19%,#171717)}.frame-pin-resize{position:absolute;bottom:6px;left:6px;z-index:4;opacity:0;background:#111a;color:white;border:0;border-radius:5px;cursor:ew-resize;touch-action:none}.frame-tile:hover .frame-pin-resize,.frame-pin-resize:focus-visible{opacity:1}.frame-root .frame-tile{display:flex;flex-direction:column}.frame-root .frame-tile .frame-tile-click{flex:0 0 auto}.frame-root .frame-tile .frame-tile-footer{margin-top:auto;padding-top:4px}.frame-root .frame-tile .frame-artwork{aspect-ratio:2.3}.frame-root .frame-tile{min-height:185px}.frame-root .frame-grid{grid-auto-flow:row dense}
 
         .frame-root{font-family:inherit;color:var(--spice-text,#fff);padding:20px 22px 55px;max-width:1600px;margin:auto;background:radial-gradient(ellipse at 15% 0%,color-mix(in srgb,var(--frame-accent) 16%,transparent),transparent 52%);min-height:100%}
@@ -545,6 +567,7 @@
         h('button', { onClick: () => editPin(pinMenu.item) }, 'Edit pin'),
         h('button', { onClick: () => { toggleFavorite(pinMenu.item); setPinMenu(null); } }, pinMenu.item.favorite ? 'Unfavorite' : 'Favorite'),
         h('button', { onClick: () => { duplicatePin(pinMenu.item); setPinMenu(null); } }, 'Duplicate'),
+        h('button', { onClick: () => { toggleCover(pinMenu.item); setPinMenu(null); } }, pinMenu.item.cover ? 'Use normal artwork' : 'Use full-cover artwork'),
         h('button', { onClick: () => { removePin(pinMenu.item.id); setPinMenu(null); } }, 'Remove')
       ), document.body),
       pinRename && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-modal-overlay', onClick: () => setPinRename(null) },
@@ -591,30 +614,31 @@
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px', alignItems: 'center' } },
         h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' }),
-        button(compact ? 'Comfortable view' : 'Compact view', () => setCompact(!compact)),
+        button(shuffleOnPlay ? 'Shuffle: On' : 'Shuffle: Off', toggleShuffle, shuffleOnPlay ? 'primary' : ''),
         button(showFavoritesOnly ? 'Show all pins' : 'Favorites only', () => setShowFavoritesOnly(!showFavoritesOnly)),
         button(showShortcuts ? 'Hide tips' : 'Tips', () => setShowShortcuts(!showShortcuts)),
         undo && button('Undo last removal', () => { update(() => JSON.parse(undo)); setUndo(null); dragIndex.current = null; setDragOver(null); })
       ),
-      showShortcuts && h('p', { className: 'frame-shortcuts' }, 'Click a tile to open it. Use its green play button to start music. Drag tiles in Custom order. Use Edit workspace to change artwork, tile size or destinations.'),
+      showShortcuts && h('p', { className: 'frame-shortcuts' }, 'Click a tile to open it. ▶ plays with your Shuffle setting. Right-click for full-cover artwork. Drag the corner to resize.'),
       playbackError && h('p', { className: 'frame-error' }, playbackError),
       items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Favorites stay at the top. Drag workspace tabs to reorder them too.'),
       h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
-        h('article', { className: 'frame-tile' + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === i ? ' frame-drop-target' : ''), key: item.id, style: { gridColumn: 'span ' + (item.width || (item.size === 'large' ? 2 : 1)) },
+        h('article', { className: 'frame-tile' + (item.cover ? ' frame-cover-tile' : '') + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === item.id ? ' frame-drop-target' : ''), key: item.id, 'data-frame-pin': item.id, style: { gridColumn: 'span ' + (item.width || (item.size === 'large' ? 2 : 1)), height: (item.height || 195) + 'px' },
           onContextMenu: e => { e.preventDefault(); setPinMenu({ item, x: Math.min(e.clientX,window.innerWidth-190), y: Math.min(e.clientY,window.innerHeight-190) }); },
           draggable: !filter.trim(),
           onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = item.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
-          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
+          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(item.id); } },
           onDrop: e => { e.preventDefault(); if (!filter.trim()) reorder(dragIndex.current, item.id); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
           h('div', { className: 'frame-tile-click', role: 'link', tabIndex: 0, onClick: () => { if (dragIndex.current === null) openPin(item); }, onKeyDown: e => { if (e.key === 'Enter') openPin(item); } }, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name)),
           h('button', { className: 'frame-pin-star' + (item.favorite ? ' is-favorite' : ''), title: item.favorite ? 'Unfavorite' : 'Favorite', 'aria-label': item.favorite ? 'Unfavorite' : 'Favorite', type: 'button', onClick: e => { e.stopPropagation(); toggleFavorite(item); } }, item.favorite ? '★' : '☆'),
           h('div', { className: 'frame-tile-footer' }, h('button', { className: 'frame-pin-play', type: 'button', title: 'Play ' + item.name, 'aria-label': 'Play ' + item.name, onClick: e => { e.stopPropagation(); playPin(item); } }, '▶')),
-          h('button', { className: 'frame-pin-resize', draggable: false, title: 'Drag to resize tile', 'aria-label': 'Drag to resize tile', type: 'button', onPointerDown: e => { e.stopPropagation(); e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); e.currentTarget.dataset.startX = String(e.clientX); e.currentTarget.dataset.startWidth = String(item.width || (item.size === 'large' ? 2 : 1)); }, onPointerUp: e => { e.stopPropagation(); const delta = e.clientX - Number(e.currentTarget.dataset.startX || e.clientX); const width = Number(e.currentTarget.dataset.startWidth || 1); resizePin(item.id, Math.max(1,Math.min(3,width + Math.round(delta/135)))); } }, '◢'),
+          h('button', { className: 'frame-pin-resize', draggable: false, title: 'Drag to resize width and height', 'aria-label': 'Resize tile', type: 'button', onPointerDown: e => startResize(e,item), onClick: e => e.stopPropagation() }, '◢'),
           h('button', { className: 'frame-pin-delete', title: 'Remove pin', 'aria-label': 'Remove pin', type: 'button', onClick: e => { e.stopPropagation(); removePin(item.id); } }, '×')
         )
       ), h('button', { className: 'frame-add-tile', type: 'button', title: 'Add pin', 'aria-label': 'Add pin', onClick: () => { setAddOpen(true); setError(''); } }, h('span', null, '+'), h('small', null, 'Add a pin'))),
+      resizePreview && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-resize-outline', style: (() => { const el = document.querySelector('.frame-tile[data-frame-pin="' + resizePreview.id + '"]'); if (!el) return { display:'none' }; const rect = el.getBoundingClientRect(), grid=el.parentElement, styles=getComputedStyle(grid), cols=styles.gridTemplateColumns.split(' ').filter(Boolean).length||1, gap=parseFloat(styles.columnGap)||10, unit=(grid.clientWidth-gap*(cols-1))/cols+gap; return { left:rect.left+'px',top:rect.top+'px',width:(unit*resizePreview.width-gap)+'px',height:resizePreview.height+'px' }; })() }, h('span', null, resizePreview.width + ' columns × ' + resizePreview.height + 'px')),document.body),
       addOpen && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-modal-overlay', onClick: () => setAddOpen(false) }, h('section', { className: 'frame-form frame-modal-panel', onClick: e => e.stopPropagation() },
         h('div', { className: 'frame-form-row', style: { justifyContent: 'space-between' } }, h('h3', null, 'Add a pin'), button('Cancel', () => setAddOpen(false))),
         h('p', { className: 'frame-muted' }, 'Paste a Spotify playlist, album, artist, or track link and give it a name.'),
