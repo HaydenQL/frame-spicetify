@@ -1,3 +1,15 @@
+# FRAME v0.2.4
+
+Fixes based on the user's tile screenshots:
+- Tile artwork flexes with both width and height instead of retaining fixed aspect ratios that clip content.
+- Full-cover mode anchors the playlist type and title above the bottom controls, with a readability gradient.
+- Delete control is larger and higher-contrast on hover.
+- Pin drag targets highlight left or right insertion edges; source ID can be recovered from the drag payload.
+- Liked Songs play uses Spotify's PlayerAPI collection context instead of navigating to Liked Songs. Errors are shown instead of silently opening the collection. This depends on Spotify client API compatibility.
+- JavaScript syntax checked. In-client playback and updater behavior remain unverified.
+
+Focused tests: resize a tall and short tile; full-cover labels at bottom; delete hover; reorder left and right; press play on Liked Songs and report any error text. For updater failures, inspect %LOCALAPPDATA%\\FrameUpdater\\last-update.log and bridge-status.json before making further updater changes.
+
 # FRAME v0.2.3
 
 - Drag tile bottom-right corner to resize both width (1-4 columns) and height (150-560 px).
