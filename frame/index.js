@@ -152,6 +152,7 @@
     const [customAccent, setCustomAccent] = React.useState('#1db954');
     const [backgrounds, setBackgrounds] = React.useState(() => { try { return JSON.parse(Spicetify.LocalStorage.get('frame:backgrounds:v1') || '{}'); } catch (_) { return {}; } });
     const [backgroundError, setBackgroundError] = React.useState('');
+    const [helperStatus, setHelperStatus] = React.useState('');
     const [name, setName] = React.useState('');
     const [link, setLink] = React.useState('');
     const [error, setError] = React.useState('');
@@ -350,6 +351,15 @@
       touched.forEach(el => { el.style.background = 'linear-gradient(145deg,' + accent + '25, #101010 72%)'; });
       return () => touched.forEach((el,i) => { el.style.background=old[i]; });
     }, [data.active, themeBySpace]);
+    const checkHelper = async () => {
+      setHelperStatus('Checking local update helper…');
+      try {
+        const response = await fetch('http://127.0.0.1:43891/status', { signal: AbortSignal.timeout(3000) });
+        if (!response.ok) throw Error('HTTP ' + response.status);
+        const status = await response.json();
+        setHelperStatus('Update helper: ' + (status.message || status.status || 'connected'));
+      } catch (_) { setHelperStatus('Update helper not reachable. Install frame-update-helper.zip from the latest GitHub release.'); }
+    };
     const diagnoseArtwork = async () => {
       const sample = items.find(x => x.uri.startsWith('spotify:playlist:')) || items.find(x => /^spotify:(album|artist|track):/.test(x.uri));
       if (!sample) { setArtworkStatus('Add a playlist, album or artist pin first.'); return; }
@@ -615,7 +625,7 @@
         )),
 
       )), document.body),
-      h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()), button('Test update notification', () => window.dispatchEvent(new Event('frame:test-update-notification'))),
+      h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()), button('Test update notification', () => window.dispatchEvent(new Event('frame:test-update-notification'))), button('Check update helper', checkHelper), helperStatus && h('span', { className: 'frame-muted', role: 'status' }, helperStatus),
         h('input', { ref: file, type: 'file', accept: '.json,application/json', hidden: true, onChange: importFile }),
         h('span', { className: 'frame-muted' }, `FRAME ${FRAME_VERSION} · Saved locally.`)
       ),
