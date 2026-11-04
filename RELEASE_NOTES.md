@@ -1,3 +1,23 @@
+# FRAME v0.2.3
+
+- Drag tile bottom-right corner to resize both width (1-4 columns) and height (150-560 px).
+- Show a dashed live resize outline with dimensions before applying the new tile size.
+- Fix left-to-right pin reorder: dropping on the right half inserts after the target; dropping on the left half inserts before. Favorites still stay in the top group.
+- Remove Compact view toggle.
+- Add a persistent Shuffle On/Off control that sets Spotify shuffle before playing pinned playlists, albums or tracks when supported by the Spotify player API.
+- Right-click a pin for Full-cover artwork, which fills the tile and uses a dark gradient for readable text and buttons. Toggle back to normal artwork through the same menu.
+- Keep custom images, workspace backgrounds, favorites, and other existing features.
+
+## Focused tests
+1. Drag first pin to the right of the second pin and back.
+2. Drag a favorite pin to the right of another favorite.
+3. Resize width and height with bottom-right corner; confirm outline updates before release.
+4. Set a tile to full-cover artwork through right-click, verify text/play/star stay readable.
+5. Toggle Shuffle On, press Play on a playlist, verify Spotify shuffle state. Repeat with Off.
+6. Verify Compact view control is gone.
+
+Known limitations: Resizing snaps to grid columns and 10px height steps; Spotify shuffle behavior depends on its playback API. The update helper and automatic artist artwork are still unverified.
+
 # FRAME v0.2.2
 
 ## Changes
