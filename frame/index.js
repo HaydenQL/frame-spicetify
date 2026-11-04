@@ -150,6 +150,8 @@
     const [addOpen, setAddOpen] = React.useState(false);
     const [pinMenu, setPinMenu] = React.useState(null);
     const [customAccent, setCustomAccent] = React.useState('#1db954');
+    const [backgrounds, setBackgrounds] = React.useState(() => { try { return JSON.parse(Spicetify.LocalStorage.get('frame:backgrounds:v1') || '{}'); } catch (_) { return {}; } });
+    const [backgroundError, setBackgroundError] = React.useState('');
     const [name, setName] = React.useState('');
     const [link, setLink] = React.useState('');
     const [error, setError] = React.useState('');
@@ -302,6 +304,52 @@
         return next;
       });
     };
+    const setBackground = image => {
+      setBackgrounds(prev => {
+        const next = { ...prev, [data.active]: image };
+        try { Spicetify.LocalStorage.set('frame:backgrounds:v1', JSON.stringify(next)); setBackgroundError(''); }
+        catch (_) { setBackgroundError('Background could not be saved. Try a smaller image.'); }
+        return next;
+      });
+    };
+    const uploadBackground = async event => {
+      const file = event.target.files?.[0]; if (!file) return;
+      if (!file.type.startsWith('image/') || file.size > 10000000) { setBackgroundError('Select an image smaller than 10 MB.'); return; }
+      const blobUrl = URL.createObjectURL(file);
+      try {
+        const image = new Image();
+        await new Promise((resolve,reject) => { image.onload=resolve; image.onerror=reject; image.src=blobUrl; });
+        const canvas = document.createElement('canvas');
+        const scale = Math.min(1, 1200/Math.max(image.width,image.height));
+        canvas.width = Math.max(1,Math.round(image.width*scale));
+        canvas.height = Math.max(1,Math.round(image.height*scale));
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(image,0,0,canvas.width,canvas.height);
+        // Sample visible pixels and choose a vibrant but readable accent.
+        const pixels = ctx.getImageData(0,0,canvas.width,canvas.height).data;
+        let best = [29,185,84], bestScore = -1;
+        const step = Math.max(4,Math.floor(pixels.length/6000/4)*4);
+        for (let i=0;i<pixels.length;i+=step) {
+          const red=pixels[i],green=pixels[i+1],blue=pixels[i+2];
+          const max=Math.max(red,green,blue),min=Math.min(red,green,blue);
+          const saturation=max-min;
+          const score=saturation * (1-Math.abs(max-180)/255);
+          if(score>bestScore && max>60 && max<250) { bestScore=score; best=[red,green,blue]; }
+        }
+        const accent='#'+best.map(v=>Math.round(v).toString(16).padStart(2,'0')).join('');
+        setBackground(canvas.toDataURL('image/jpeg',0.68));
+        setTheme(accent);
+      } catch (_) { setBackgroundError('Could not load that background image.'); }
+      finally { URL.revokeObjectURL(blobUrl); event.target.value=''; }
+    };
+    React.useEffect(() => {
+      const selectors = ['.Root__nav-bar','.Root__main-view','.main-view-container'];
+      const touched = selectors.map(s=>document.querySelector(s)).filter(Boolean);
+      const old = touched.map(el=>el.style.background);
+      const accent = themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : ({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954';
+      touched.forEach(el => { el.style.background = 'linear-gradient(145deg,' + accent + '25, #101010 72%)'; });
+      return () => touched.forEach((el,i) => { el.style.background=old[i]; });
+    }, [data.active, themeBySpace]);
     const diagnoseArtwork = async () => {
       const sample = items.find(x => x.uri.startsWith('spotify:playlist:')) || items.find(x => /^spotify:(album|artist|track):/.test(x.uri));
       if (!sample) { setArtworkStatus('Add a playlist, album or artist pin first.'); return; }
@@ -404,8 +452,10 @@
       event.target.value = '';
     };
     const button = (label, fn, className = '') => h('button', { className: 'frame-button ' + className, onClick: fn, type: 'button' }, label);
-    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), style: { '--frame-accent': themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : (({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954') }, onClick: () => { if(contextMenu) setContextMenu(null); if(pinMenu) setPinMenu(null); } },
+    return h('main', { className: 'frame-root' + (compact ? ' frame-compact' : ''), style: { '--frame-accent': themeBySpace[data.active]?.startsWith('#') ? themeBySpace[data.active] : (({ green:'#1db954', violet:'#a78bfa', blue:'#60a5fa', rose:'#fb7185', amber:'#fbbf24' })[themeBySpace[data.active]] || '#1db954'), backgroundImage: backgrounds[data.active] ? 'linear-gradient(180deg,#080808b8,#080808ed),url(' + backgrounds[data.active] + ')' : undefined, backgroundSize: 'cover', backgroundPosition: 'center', backgroundAttachment: 'fixed' }, onClick: () => { if(contextMenu) setContextMenu(null); if(pinMenu) setPinMenu(null); } },
       h('style', null, `
+        .frame-modal-overlay{position:fixed;inset:0;z-index:2147483640;display:flex;align-items:center;justify-content:center;padding:20px;background:#000b;overflow:auto}.frame-modal-panel{width:min(460px,100%);max-height:calc(100dvh - 40px);overflow-y:auto;background:var(--spice-card,#262626);border:1px solid #ffffff30;border-radius:14px;padding:24px;box-shadow:0 24px 80px #000b;color:var(--spice-text,#fff);margin:auto}.frame-modal-panel .frame-field{display:block;width:100%;margin:10px 0}.frame-modal-panel .frame-inputs{display:flex;flex-direction:column;align-items:stretch;gap:10px}.frame-modal-panel .frame-dialog-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:16px}.frame-modal-panel h3{margin:0 0 15px}.frame-modal-panel input[type=file]{max-width:100%}.frame-add-tile{min-height:185px;border:2px dashed color-mix(in srgb,var(--frame-accent) 55%,#666);background:color-mix(in srgb,var(--frame-accent) 7%,#171717);color:inherit;border-radius:12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px}.frame-add-tile span{font-size:44px;line-height:1}.frame-add-tile small{font-size:13px}.frame-add-tile:hover{background:color-mix(in srgb,var(--frame-accent) 19%,#171717)}.frame-pin-resize{position:absolute;bottom:6px;left:6px;z-index:4;opacity:0;background:#111a;color:white;border:0;border-radius:5px;cursor:ew-resize;touch-action:none}.frame-tile:hover .frame-pin-resize,.frame-pin-resize:focus-visible{opacity:1}.frame-root .frame-tile{display:flex;flex-direction:column}.frame-root .frame-tile .frame-tile-click{flex:0 0 auto}.frame-root .frame-tile .frame-tile-footer{margin-top:auto;padding-top:4px}.frame-root .frame-tile .frame-artwork{aspect-ratio:2.3}.frame-root .frame-tile{min-height:185px}.frame-root .frame-grid{grid-auto-flow:row dense}
+
         .frame-root{font-family:inherit;color:var(--spice-text,#fff);padding:20px 22px 55px;max-width:1600px;margin:auto;background:radial-gradient(ellipse at 15% 0%,color-mix(in srgb,var(--frame-accent) 16%,transparent),transparent 52%);min-height:100%}
         .frame-root *{box-sizing:border-box}.frame-root .frame-tile{background:linear-gradient(155deg,color-mix(in srgb,var(--frame-accent) 13%,var(--spice-card,#242424)),var(--spice-card,#242424));position:relative;min-height:0;padding:12px}.frame-root .frame-tile:hover{border-color:var(--frame-accent)}.frame-root .frame-artwork{height:auto;aspect-ratio:1.8;margin-bottom:8px}.frame-root .frame-tile.frame-tile-large .frame-artwork{aspect-ratio:2.6}.frame-root .frame-grid{grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.frame-root .frame-tile .frame-name{font-size:15px}.frame-root .frame-quick{background:color-mix(in srgb,var(--frame-accent) 9%,var(--spice-card,#242424))}.frame-pin-star{position:absolute;right:8px;top:8px;z-index:3;opacity:0;border:0;border-radius:50%;background:#111b;color:white;cursor:pointer;padding:5px 8px;font-size:18px}.frame-tile:hover .frame-pin-star,.frame-pin-star:focus-visible,.frame-pin-star.is-favorite{opacity:1}.frame-pin-delete{position:absolute;right:8px;bottom:8px;border:0;background:#1119;color:#ffb4aa;cursor:pointer;border-radius:6px;opacity:0}.frame-tile:hover .frame-pin-delete,.frame-pin-delete:focus-visible{opacity:1}.frame-root .frame-dialog-overlay{z-index:2147483000;overflow:auto;align-items:center}.frame-root .frame-dialog{max-height:calc(100vh - 32px);overflow-y:auto;flex-shrink:0}.frame-root .frame-dialog .frame-field{display:block;width:100%;margin:10px 0}.frame-root .frame-pin-play{width:33px;height:33px;font-size:14px}.frame-root .frame-button.primary,.frame-root .frame-pin-play{background:var(--frame-accent,#1db954)}.frame-root .frame-tab.frame-tab-drop,.frame-root .frame-tile.frame-drop-target{outline-color:var(--frame-accent,#1db954)}.frame-quick{margin:0 0 20px;padding:14px;border-radius:12px;background:var(--spice-card,#252525)}.frame-quick h3{font-size:14px;margin:0 0 10px}.frame-quick-items{display:flex;gap:8px;flex-wrap:wrap}.frame-quick-item{border:1px solid #ffffff22;background:var(--spice-main,#151515);color:inherit;padding:8px 12px;border-radius:8px;cursor:pointer;font:inherit;font-size:12px}.frame-quick-item:hover{border-color:var(--frame-accent,#1db954)}.frame-theme-select{max-width:170px;flex:0 0 auto}.frame-header{display:flex;align-items:flex-end;justify-content:space-between;gap:20px;margin-bottom:32px}
         .frame-eyebrow{font-size:11px;font-weight:700;letter-spacing:.2em;text-transform:uppercase;color:var(--spice-subtext,#aaa)}
@@ -452,6 +502,9 @@
         h('select', { className: 'frame-field frame-theme-select', value: (themeBySpace[data.active] || 'green').startsWith('#') ? 'custom' : (themeBySpace[data.active] || 'green'), onChange: e => { if(e.target.value==='custom') setTheme(customAccent); else setTheme(e.target.value); }, 'aria-label': 'Workspace accent color' },
           ...[['green','Spotify green'],['violet','Violet'],['blue','Blue'],['rose','Rose'],['amber','Amber'],['custom','Custom color']].map(([value,label]) => h('option', { key: value, value }, label))),
         (themeBySpace[data.active] || '').startsWith('#') && h('input', { type: 'color', title: 'Custom accent color', value: themeBySpace[data.active], onChange: e => { setCustomAccent(e.target.value); setTheme(e.target.value); } }),
+        h('label', { className: 'frame-button', style: { cursor: 'pointer' } }, 'Background image', h('input', { type: 'file', accept: 'image/*', hidden: true, onChange: uploadBackground })),
+        backgrounds[data.active] && button('Clear background', () => setBackground('')),
+        backgroundError && h('span', { className: 'frame-error' }, backgroundError),
         button(showQuick ? 'Hide quick access' : 'Show quick access', () => setShowQuick(!showQuick)),
         button(diagnosing ? 'Checking artwork…' : 'Diagnose artwork', diagnoseArtwork),
         artworkStatus && h('span', { className: 'frame-muted', role: 'status' }, artworkStatus)
