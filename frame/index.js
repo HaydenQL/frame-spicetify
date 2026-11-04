@@ -5,7 +5,7 @@
   const React = Spicetify.React;
   const h = React.createElement;
   const KEY = 'frame:workspaces:v1';
-  const FRAME_VERSION = '0.2.1';
+  const FRAME_VERSION = '0.2.2';
   const UPDATE_REPO = 'HaydenQL/frame-spicetify';
 
   const DEFAULTS = {
@@ -166,8 +166,8 @@
     const [pinImageValue, setPinImageValue] = React.useState('');
     const [uploadingImage, setUploadingImage] = React.useState(false);
     const [pinSizeValue, setPinSizeValue] = React.useState('normal');
-    const [pinFavoriteValue, setPinFavoriteValue] = React.useState(false);
-    const [sortMode, setSortMode] = React.useState('custom');
+    
+    
     const [compact, setCompact] = React.useState(false);
     const [undo, setUndo] = React.useState(null);
     const [showFavoritesOnly, setShowFavoritesOnly] = React.useState(false);
@@ -214,7 +214,7 @@
     }, []);
 
     const items = data.spaces[data.active] || [];
-    const visibleItems = items.map((item, index) => ({ item, index })).filter(({ item }) => (!showFavoritesOnly || item.favorite) && (item.name + ' ' + item.kind).toLowerCase().includes(filter.toLowerCase())).sort((a,b) => Number(!!b.item.favorite)-Number(!!a.item.favorite) || (sortMode === 'name' ? a.item.name.localeCompare(b.item.name) : a.index-b.index));
+    const visibleItems = items.map((item, index) => ({ item, index })).filter(({ item }) => (!showFavoritesOnly || item.favorite) && (item.name + ' ' + item.kind).toLowerCase().includes(filter.toLowerCase())).sort((a,b) => Number(!!b.item.favorite)-Number(!!a.item.favorite) || a.index-b.index);
     const update = (fn) => setData(prev => {
       const next = normalize(fn(prev));
       try { write(next); } catch (_) { setError('Could not save locally. Check available storage.'); }
@@ -228,7 +228,7 @@
       spaces[prev.active] = list;
       return { ...prev, spaces };
     });
-    const editPin = item => { setPinMenu(null); setPinRename(item.id); setPinRenameValue(item.name); setPinLinkValue(item.uri); setPinImageValue(item.image || ''); setPinSizeValue(item.size || 'normal'); setPinFavoriteValue(!!item.favorite); setError(''); };
+    const editPin = item => { setPinMenu(null); setPinRename(item.id); setPinRenameValue(item.name); setPinLinkValue(item.uri); setPinImageValue(item.image || ''); setPinSizeValue(item.size || 'normal'); setError(''); };
     const toggleFavorite = item => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].map(x => x.id === item.id ? { ...x, favorite: !x.favorite } : x) } }));
     const uploadImage = async event => {
       const f = event.target.files?.[0]; if (!f) return;
@@ -255,7 +255,7 @@
       if (!value || !uri) { setError('Enter a name and valid Spotify link or URI.'); return; }
       if (pinImageValue.trim() && !/^(https:\/\/|data:image\/jpeg;base64,)/.test(pinImageValue.trim())) { setError('Custom artwork must use an HTTPS image URL.'); return; }
       update(prev => ({ ...prev, spaces: { ...prev.spaces,
-        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value, uri, kind: uri.split(':')[1], image: pinImageValue.trim(), size: pinSizeValue, favorite: pinFavoriteValue } : item)
+        [prev.active]: prev.spaces[prev.active].map(item => item.id === pinRename ? { ...item, name: value, uri, kind: uri.split(':')[1], image: pinImageValue.trim(), size: pinSizeValue, favorite: item.favorite } : item)
       } }));
       setPinRename(null); setPinRenameValue(''); setPinLinkValue(''); setPinImageValue(''); setError('');
     };
@@ -271,17 +271,22 @@
         return { ...prev, spaces: Object.fromEntries(entries) };
       });
     };
-    const reorder = (from, to) => {
-      if (from === null || from === to || from < 0 || to < 0) return;
+    const reorder = (sourceId, targetId) => {
+      if (!sourceId || !targetId || sourceId === targetId) return;
       update(prev => {
-        const spaces = { ...prev.spaces }, list = [...spaces[prev.active]];
-        if (from >= list.length || to >= list.length) return prev;
-        const [moved] = list.splice(from, 1);
-        list.splice(to, 0, moved);
-        spaces[prev.active] = list;
-        return { ...prev, spaces };
+        const list = [...prev.spaces[prev.active]].sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite));
+        const from = list.findIndex(x => x.id === sourceId);
+        const to = list.findIndex(x => x.id === targetId);
+        if (from < 0 || to < 0) return prev;
+        const [moved] = list.splice(from,1);
+        const destination = list.findIndex(x => x.id === targetId);
+        list.splice(destination,0,moved);
+        // Persist favorites first, including after dragging or unfavoriting.
+        list.sort((a,b) => Number(!!b.favorite)-Number(!!a.favorite));
+        return { ...prev, spaces: { ...prev.spaces, [prev.active]: list } };
       });
     };
+    const resizePin = (id, width) => update(prev => ({ ...prev, spaces: { ...prev.spaces, [prev.active]: prev.spaces[prev.active].map(x => x.id === id ? { ...x, width: Math.max(1,Math.min(3,width)) } : x) } }));
     const rememberPin = item => {
       setRecentPins(prev => {
         const next = [{ uri: item.uri, name: item.name, image: item.image || '' }, ...prev.filter(x => x.uri !== item.uri)].slice(0, 8);
@@ -465,7 +470,7 @@
       ),
       h('div', { className: 'frame-workspace-toolbar' },
         h('h2', null, data.active),
-        h('button', { className: 'frame-button frame-plus', title: 'Add pin', 'aria-label': 'Add pin', onClick: () => { setAddOpen(true); setError(''); } }, '+')
+        null
       ),
       contextMenu && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-menu', style: { left: contextMenu.x, top: contextMenu.y },
         onClick: e => e.stopPropagation() },
@@ -479,8 +484,8 @@
         h('button', { onClick: () => { duplicatePin(pinMenu.item); setPinMenu(null); } }, 'Duplicate'),
         h('button', { onClick: () => { removePin(pinMenu.item.id); setPinMenu(null); } }, 'Remove')
       ), document.body),
-      pinRename && h('div', { className: 'frame-dialog-overlay', onClick: () => setPinRename(null) },
-        h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: savePinName },
+      pinRename && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-modal-overlay', onClick: () => setPinRename(null) },
+        h('form', { className: 'frame-dialog frame-modal-panel', onClick: e => e.stopPropagation(), onSubmit: savePinName },
           h('h3', null, 'Edit pin'),
           h('input', { className: 'frame-field', autoFocus: true, maxLength: 100, required: true,
             'aria-label': 'Pin display name', value: pinRenameValue, onChange: e => setPinRenameValue(e.target.value) }),
@@ -488,7 +493,6 @@
           h('input', { className: 'frame-field', maxLength: 250000, placeholder: 'Optional HTTPS artwork URL', 'aria-label': 'Custom artwork URL', value: pinImageValue, onChange: e => setPinImageValue(e.target.value) }),
           h('label', { className: 'frame-muted' }, uploadingImage ? 'Processing image…' : 'Or upload a JPG/PNG file'),
           h('input', { type: 'file', accept: 'image/*', onChange: uploadImage }),
-          h('label', null, h('input', { type: 'checkbox', checked: pinFavoriteValue, onChange: e => setPinFavoriteValue(e.target.checked) }), ' Favorite pin'),
           h('select', { className: 'frame-field', value: pinSizeValue, onChange: e => setPinSizeValue(e.target.value), 'aria-label': 'Pin size' },
             h('option', { value: 'normal' }, 'Normal tile'), h('option', { value: 'large' }, 'Large tile')),
           error && h('p', { className: 'frame-error' }, error),
@@ -497,7 +501,7 @@
             h('button', { className: 'frame-button primary', type: 'submit' }, 'Save pin')
           )
         )
-      ),
+      ), document.body),
       dialog && h('div', { className: 'frame-dialog-overlay', onClick: () => setDialog(null) },
         h('form', { className: 'frame-dialog', onClick: e => e.stopPropagation(), onSubmit: submitDialog },
           h('h3', null, dialog.type === 'create' ? 'Create workspace' : dialog.type === 'rename' ? 'Rename workspace' : 'Delete workspace?'),
@@ -524,32 +528,31 @@
       ),
       h('div', { className: 'frame-form-row', style: { marginBottom: '18px', alignItems: 'center' } },
         h('input', { className: 'frame-field', placeholder: 'Search this workspace', value: filter, onChange: e => setFilter(e.target.value), 'aria-label': 'Search this workspace' }),
-        h('select', { className: 'frame-field', style: { flex: '0 0 auto' }, value: sortMode, onChange: e => setSortMode(e.target.value), 'aria-label': 'Sort pins' },
-          h('option', { value: 'custom' }, 'Custom order'), h('option', { value: 'name' }, 'Name A-Z'), h('option', { value: 'favorites' }, 'Favorites first')),
         button(compact ? 'Comfortable view' : 'Compact view', () => setCompact(!compact)),
         button(showFavoritesOnly ? 'Show all pins' : 'Favorites only', () => setShowFavoritesOnly(!showFavoritesOnly)),
         button(showShortcuts ? 'Hide tips' : 'Tips', () => setShowShortcuts(!showShortcuts)),
-        undo && button('Undo last removal', () => { update(() => JSON.parse(undo)); setUndo(null); dragIndex.current = null; setDragOver(null); setSortMode('custom'); })
+        undo && button('Undo last removal', () => { update(() => JSON.parse(undo)); setUndo(null); dragIndex.current = null; setDragOver(null); })
       ),
       showShortcuts && h('p', { className: 'frame-shortcuts' }, 'Click a tile to open it. Use its green play button to start music. Drag tiles in Custom order. Use Edit workspace to change artwork, tile size or destinations.'),
       playbackError && h('p', { className: 'frame-error' }, playbackError),
-      items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Drag workspace tabs to reorder them too.'),
-      visibleItems.length ? h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
-        h('article', { className: 'frame-tile' + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === i ? ' frame-drop-target' : ''), key: item.id,
+      items.length > 1 && !filter.trim() && h('p', { className: 'frame-drag-help' }, 'Drag pins to rearrange them. Favorites stay at the top. Drag workspace tabs to reorder them too.'),
+      h('section', { className: 'frame-grid', 'aria-label': 'Pinned items' }, ...visibleItems.map(({ item, index: i }) =>
+        h('article', { className: 'frame-tile' + (item.size === 'large' ? ' frame-tile-large' : '') + (dragOver === i ? ' frame-drop-target' : ''), key: item.id, style: { gridColumn: 'span ' + (item.width || (item.size === 'large' ? 2 : 1)) },
           onContextMenu: e => { e.preventDefault(); setPinMenu({ item, x: Math.min(e.clientX,window.innerWidth-190), y: Math.min(e.clientY,window.innerHeight-190) }); },
-          draggable: !filter.trim() && sortMode === 'custom',
-          onDragStart: e => { if (filter.trim() || sortMode !== 'custom') { e.preventDefault(); return; } dragIndex.current = i; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
-          onDragOver: e => { if (sortMode === 'custom' && !filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
-          onDrop: e => { e.preventDefault(); if (sortMode === 'custom' && !filter.trim()) reorder(dragIndex.current, i); dragIndex.current = null; setDragOver(null); },
+          draggable: !filter.trim(),
+          onDragStart: e => { if (filter.trim()) { e.preventDefault(); return; } dragIndex.current = item.id; e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', item.id); },
+          onDragOver: e => { if (!filter.trim() && dragIndex.current !== null) { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOver(i); } },
+          onDrop: e => { e.preventDefault(); if (!filter.trim()) reorder(dragIndex.current, item.id); dragIndex.current = null; setDragOver(null); },
           onDragEnd: () => { dragIndex.current = null; setDragOver(null); }
         },
           h('div', { className: 'frame-tile-click', role: 'link', tabIndex: 0, onClick: () => { if (dragIndex.current === null) openPin(item); }, onKeyDown: e => { if (e.key === 'Enter') openPin(item); } }, h(Artwork, { item }), h('div', { className: 'frame-kind' }, item.kind), h('div', { className: 'frame-name' }, (item.favorite ? '★ ' : '') + item.name)),
           h('button', { className: 'frame-pin-star' + (item.favorite ? ' is-favorite' : ''), title: item.favorite ? 'Unfavorite' : 'Favorite', 'aria-label': item.favorite ? 'Unfavorite' : 'Favorite', type: 'button', onClick: e => { e.stopPropagation(); toggleFavorite(item); } }, item.favorite ? '★' : '☆'),
           h('div', { className: 'frame-tile-footer' }, h('button', { className: 'frame-pin-play', type: 'button', title: 'Play ' + item.name, 'aria-label': 'Play ' + item.name, onClick: e => { e.stopPropagation(); playPin(item); } }, '▶')),
+          h('button', { className: 'frame-pin-resize', draggable: false, title: 'Drag to resize tile', 'aria-label': 'Drag to resize tile', type: 'button', onPointerDown: e => { e.stopPropagation(); e.preventDefault(); e.currentTarget.setPointerCapture(e.pointerId); e.currentTarget.dataset.startX = String(e.clientX); e.currentTarget.dataset.startWidth = String(item.width || (item.size === 'large' ? 2 : 1)); }, onPointerUp: e => { e.stopPropagation(); const delta = e.clientX - Number(e.currentTarget.dataset.startX || e.clientX); const width = Number(e.currentTarget.dataset.startWidth || 1); resizePin(item.id, Math.max(1,Math.min(3,width + Math.round(delta/135)))); } }, '◢'),
           h('button', { className: 'frame-pin-delete', title: 'Remove pin', 'aria-label': 'Remove pin', type: 'button', onClick: e => { e.stopPropagation(); removePin(item.id); } }, '×')
         )
-      )) : h('div', { className: 'frame-empty' }, 'Nothing pinned here yet. Select Edit workspace to add something.'),
-      addOpen && h('section', { className: 'frame-form' },
+      ), h('button', { className: 'frame-add-tile', type: 'button', title: 'Add pin', 'aria-label': 'Add pin', onClick: () => { setAddOpen(true); setError(''); } }, h('span', null, '+'), h('small', null, 'Add a pin'))),
+      addOpen && Spicetify.ReactDOM.createPortal(h('div', { className: 'frame-modal-overlay', onClick: () => setAddOpen(false) }, h('section', { className: 'frame-form frame-modal-panel', onClick: e => e.stopPropagation() },
         h('div', { className: 'frame-form-row', style: { justifyContent: 'space-between' } }, h('h3', null, 'Add a pin'), button('Cancel', () => setAddOpen(false))),
         h('p', { className: 'frame-muted' }, 'Paste a Spotify playlist, album, artist, or track link and give it a name.'),
         h('form', { onSubmit: add }, h('div', { className: 'frame-inputs' },
@@ -558,7 +561,7 @@
           h('button', { className: 'frame-button primary', type: 'submit' }, 'Add')
         )),
 
-      ),
+      )), document.body),
       h('footer', { className: 'frame-footer' }, button('Export setup', () => saveFile(data)), button('Import setup', () => file.current?.click()), button('Test update notification', () => window.dispatchEvent(new Event('frame:test-update-notification'))),
         h('input', { ref: file, type: 'file', accept: '.json,application/json', hidden: true, onChange: importFile }),
         h('span', { className: 'frame-muted' }, `FRAME ${FRAME_VERSION} · Saved locally.`)
